@@ -1,11 +1,15 @@
+import { readFile } from "node:fs/promises";
+
 const htmlPath = process.argv[2];
 
 if (!htmlPath) {
-	console.error("Usage: bun scripts/test-history-parse.ts <history.html>");
+	console.error(
+		"Usage: node --import tsx scripts/test-history-parse.ts <history.html>",
+	);
 	process.exit(1);
 }
 
-const html = await Bun.file(htmlPath).text();
+const html = await readFile(htmlPath, "utf8");
 
 const match =
 	html.match(/var ytInitialData = (\{[\s\S]*?\});<\/script>/) ??

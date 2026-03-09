@@ -1,6 +1,6 @@
-import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import BetterSqlite3 from "better-sqlite3";
 import type { LinkedUser, QuizPayload } from "./types";
 
 type LinkedUserRow = {
@@ -33,11 +33,11 @@ export type ActiveQuizSession = {
 };
 
 export class AppDatabase {
-	private db: Database;
+	private db: BetterSqlite3.Database;
 
 	constructor(dbPath: string) {
 		mkdirSync(dirname(dbPath), { recursive: true });
-		this.db = new Database(dbPath);
+		this.db = new BetterSqlite3(dbPath);
 		this.migrate();
 	}
 
@@ -76,7 +76,7 @@ export class AppDatabase {
 	upsertTelegramUser(telegramUserId: number, chatId: number) {
 		const now = Date.now();
 		this.db
-			.query(
+			.prepare(
 				`
         INSERT INTO users (telegram_user_id, chat_id, created_at)
         VALUES ($telegramUserId, $chatId, $createdAt)
@@ -93,7 +93,7 @@ export class AppDatabase {
 
 	markVideoPolled(telegramUserId: number, publishedAt: string) {
 		this.db
-			.query(
+			.prepare(
 				`
         UPDATE users
         SET last_polled_published_at = $publishedAt
@@ -108,7 +108,7 @@ export class AppDatabase {
 
 	saveYoutubeCookieHeader(telegramUserId: number, cookieHeader: string) {
 		this.db
-			.query(
+			.prepare(
 				`
         UPDATE users
         SET youtube_cookies_json = $cookieHeader
@@ -123,7 +123,7 @@ export class AppDatabase {
 
 	getLinkedUsers(): LinkedUser[] {
 		const rows = this.db
-			.query(
+			.prepare(
 				`
         SELECT
           telegram_user_id,
@@ -131,7 +131,7 @@ export class AppDatabase {
           youtube_cookies_json AS youtube_cookie_header,
           last_polled_published_at
         FROM users
-        WHERE youtube_cookies_json IS NOT NULL
+				WHERE youtube_cookies_json IS NOT NULL
       `,
 			)
 			.all() as LinkedUserRow[];
@@ -146,7 +146,7 @@ export class AppDatabase {
 
 	hasQuizForVideo(telegramUserId: number, videoId: string): boolean {
 		const row = this.db
-			.query(
+			.prepare(
 				`SELECT id FROM quizzes WHERE telegram_user_id = $telegramUserId AND video_id = $videoId LIMIT 1`,
 			)
 			.get({ $telegramUserId: telegramUserId, $videoId: videoId });
@@ -155,7 +155,7 @@ export class AppDatabase {
 
 	createQuizSession(telegramUserId: number, chatId: number, quiz: QuizPayload) {
 		this.db
-			.query(
+			.prepare(
 				`
         INSERT INTO quizzes (
           telegram_user_id,
@@ -189,7 +189,7 @@ export class AppDatabase {
 
 	getActiveQuizSession(telegramUserId: number): ActiveQuizSession | null {
 		const row = this.db
-			.query(
+			.prepare(
 				`
         SELECT
           id,
@@ -227,7 +227,7 @@ export class AppDatabase {
 
 	countActiveQuizSessions(telegramUserId: number): number {
 		const row = this.db
-			.query(
+			.prepare(
 				`SELECT COUNT(*) AS count FROM quizzes WHERE telegram_user_id = $telegramUserId AND status = 'active'`,
 			)
 			.get({ $telegramUserId: telegramUserId }) as { count?: number } | null;
@@ -241,7 +241,7 @@ export class AppDatabase {
 		nextScore: number,
 	) {
 		this.db
-			.query(
+			.prepare(
 				`
         UPDATE quizzes
         SET current_question_index = $nextQuestionIndex,
@@ -258,7 +258,7 @@ export class AppDatabase {
 
 	completeQuizSession(quizId: number) {
 		this.db
-			.query(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
+			.prepare(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
 			.run({ $quizId: quizId });
 	}
 }

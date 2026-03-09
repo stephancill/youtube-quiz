@@ -1,6 +1,6 @@
 # YouTube Quiz Telegram Bot
 
-This Bun app polls your YouTube watch history page and sends a 3-question free-response quiz to Telegram for newly watched videos. Gemini generates each quiz and also judges every answer.
+This Node.js app polls your YouTube watch history page and sends a 3-question free-response quiz to Telegram for newly watched videos. Gemini generates each quiz and also judges every answer.
 
 ## What it does
 
@@ -16,7 +16,7 @@ This Bun app polls your YouTube watch history page and sends a 3-question free-r
 1. Install dependencies:
 
 ```bash
-bun install
+npm install
 ```
 
 2. Copy `.env.example` to `.env` and fill values.
@@ -26,7 +26,7 @@ bun install
 ## Run
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 Then in Telegram:
@@ -47,3 +47,62 @@ Then in Telegram:
 - Shorts are excluded because only entries with duration `>= 5:00` are accepted.
 - Watch percentage is inferred from YouTube thumbnail progress overlays.
 - If cookies expire or become invalid, polling notifies the user to re-link with `/link`.
+
+## Running this on OpenClaw heartbeat
+
+You can run the same quiz pipeline in OpenClaw without running a dedicated grammY bot loop.
+
+### 1. Add skill + heartbeat files to your OpenClaw workspace
+
+- `skills/youtube_quiz_openclaw/SKILL.md`
+- `HEARTBEAT.md`
+
+### 2. Use the OpenClaw helper script
+
+```bash
+npm run openclaw:quiz -- poll
+```
+
+Other actions:
+
+```bash
+# Save/update cookie header for a user
+npm run openclaw:quiz -- link --cookie 'SID=...; HSID=...'
+
+# Check active quiz status
+npm run openclaw:quiz -- status
+
+# Submit answer for current question
+npm run openclaw:quiz -- answer --answer 'my answer'
+```
+
+This OpenClaw flow is optimized for a single user and defaults internal IDs to `1`.
+You can still pass `--user-id` and `--chat-id` explicitly if needed.
+
+### 3. Configure OpenClaw heartbeat
+
+In `~/.openclaw/openclaw.json`, configure heartbeat to run on a cadence and deliver alerts:
+
+```json5
+{
+  agents: {
+    defaults: {
+      heartbeat: {
+        every: "30m",
+        target: "last",
+        activeHours: { start: "08:00", end: "22:00" }
+      }
+    }
+  }
+}
+```
+
+### 4. Cookie recovery fallback
+
+If polling fails due to expired YouTube cookies, the OpenClaw skill can recover by using the OpenClaw-managed browser profile:
+
+1. Open `https://www.youtube.com/feed/history` in the `openclaw` browser profile.
+2. Have the user sign in manually in that profile.
+3. Read cookies and rebuild the cookie header.
+4. Run `npm run openclaw:quiz -- link --cookie '...'`.
+5. Re-run `npm run openclaw:quiz -- poll`.

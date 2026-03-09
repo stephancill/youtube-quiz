@@ -8,10 +8,10 @@ This app polls a user's YouTube watch history page (via cookie header), detects 
 
 ## Stack
 
-- Runtime/package manager: Bun
+- Runtime/package manager: Node.js + npm
 - Language: TypeScript
 - Bot framework: grammY
-- Storage: SQLite via `bun:sqlite`
+- Storage: SQLite via `better-sqlite3`
 - LLM: Gemini API (`gemini-2.5-flash`)
 
 ## Runbook
@@ -19,7 +19,7 @@ This app polls a user's YouTube watch history page (via cookie header), detects 
 1. Install deps:
 
 ```bash
-bun install
+npm install
 ```
 
 2. Create local env file:
@@ -31,7 +31,7 @@ cp .env.example .env.local
 3. Start app:
 
 ```bash
-bun run dev
+npm run dev
 ```
 
 4. In Telegram:
@@ -77,8 +77,8 @@ Optional tuning:
 After code changes, always run:
 
 ```bash
-bunx @biomejs/biome check --write .
-bun run check
+npx @biomejs/biome check --write .
+npm run check
 ```
 
 If bot behavior changed, do a manual Telegram smoke test (`/start`, `/link`, answer one quiz question).
