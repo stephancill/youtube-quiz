@@ -97,9 +97,9 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				telegramUserId: telegramUserId,
-				chatId: chatId,
-				createdAt: now,
+				$telegramUserId: telegramUserId,
+				$chatId: chatId,
+				$createdAt: now,
 			});
 	}
 
@@ -113,8 +113,8 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				telegramUserId: telegramUserId,
-				publishedAt: publishedAt,
+				$telegramUserId: telegramUserId,
+				$publishedAt: publishedAt,
 			});
 	}
 
@@ -128,8 +128,8 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				telegramUserId: telegramUserId,
-				cookieHeader: cookieHeader,
+				$telegramUserId: telegramUserId,
+				$cookieHeader: cookieHeader,
 			});
 	}
 
@@ -161,7 +161,7 @@ export class AppDatabase {
 			.query(
 				`SELECT id FROM quizzes WHERE telegram_user_id = $telegramUserId AND video_id = $videoId LIMIT 1`,
 			)
-			.get({ telegramUserId: telegramUserId, videoId: videoId });
+			.get({ $telegramUserId: telegramUserId, $videoId: videoId });
 		return Boolean(row);
 	}
 
@@ -190,12 +190,12 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				telegramUserId: telegramUserId,
-				chatId: chatId,
-				videoId: quiz.videoId,
-				videoTitle: quiz.videoTitle,
-				questionsJson: JSON.stringify(quiz.questions),
-				createdAt: Date.now(),
+				$telegramUserId: telegramUserId,
+				$chatId: chatId,
+				$videoId: quiz.videoId,
+				$videoTitle: quiz.videoTitle,
+				$questionsJson: JSON.stringify(quiz.questions),
+				$createdAt: Date.now(),
 			});
 	}
 
@@ -219,7 +219,7 @@ export class AppDatabase {
         LIMIT 1
       `,
 			)
-			.get({ telegramUserId: telegramUserId }) as QuizRow | null;
+			.get({ $telegramUserId: telegramUserId }) as QuizRow | null;
 
 		if (!row) {
 			return null;
@@ -242,17 +242,17 @@ export class AppDatabase {
 			.query(
 				`SELECT COUNT(*) AS count FROM quizzes WHERE telegram_user_id = $telegramUserId AND status = 'active'`,
 			)
-			.get({ telegramUserId: telegramUserId }) as { count?: number } | null;
+			.get({ $telegramUserId: telegramUserId }) as { count?: number } | null;
 
 		return row?.count ?? 0;
 	}
 
 	getChatIdForUser(telegramUserId: number): number | null {
 		const row = this.db
-			.prepare(
+			.query(
 				`SELECT chat_id FROM users WHERE telegram_user_id = $telegramUserId LIMIT 1`,
 			)
-			.get({ telegramUserId: telegramUserId }) as { chat_id?: number } | null;
+			.get({ $telegramUserId: telegramUserId }) as { chat_id?: number } | null;
 
 		return row?.chat_id ?? null;
 	}
@@ -272,21 +272,21 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				quizId: quizId,
-				nextQuestionIndex: nextQuestionIndex,
-				nextScore: nextScore,
+				$quizId: quizId,
+				$nextQuestionIndex: nextQuestionIndex,
+				$nextScore: nextScore,
 			});
 	}
 
 	completeQuizSession(quizId: number) {
 		this.db
 			.query(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
-			.run({ quizId: quizId });
+			.run({ $quizId: quizId });
 	}
 
 	getUserQuizStats(telegramUserId: number): UserQuizStats {
 		const rows = this.db
-			.prepare(
+			.query(
 				`
         SELECT questions_json, score
         FROM quizzes
@@ -294,7 +294,7 @@ export class AppDatabase {
           AND status = 'completed'
       `,
 			)
-			.all({ telegramUserId: telegramUserId }) as CompletedQuizStatsRow[];
+			.all({ $telegramUserId: telegramUserId }) as CompletedQuizStatsRow[];
 
 		const completedVideos = rows.length;
 		const totalCorrectAnswers = rows.reduce(

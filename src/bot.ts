@@ -298,30 +298,42 @@ export class QuizBot {
 		if (!message || !("text" in message)) {
 			return;
 		}
-
-		const active = this.db.getActiveQuizSession(ctx.from.id);
-		if (!active) {
-			return;
-		}
-
-		const question = active.questions[active.currentQuestionIndex];
-		if (!question) {
-			return;
-		}
-
 		const text = message.text;
 		if (!text) {
 			return;
 		}
 
+		const active = this.db.getActiveQuizSession(ctx.from.id);
+		if (!active) {
+			if (!text.startsWith("/")) {
+				await ctx.reply("No active quiz right now. Use /refresh to check for new quizzes.");
+			}
+			return;
+		}
+
+		const question = active.questions[active.currentQuestionIndex];
+		if (!question) {
+			await ctx.reply(
+				"I could not find the current quiz question. Use /status, then /refresh if needed.",
+			);
+			return;
+		}
+
 		const userAnswer = text.trim();
 
-		const grade = await this.geminiService.gradeAnswer({
-			question: question.prompt,
-			correctAnswer: question.correctAnswer,
-			sourceTimestamp: question.sourceTimestamp,
-			userAnswer,
-		});
+		let grade: { isCorrect: boolean; feedback: string };
+		try {
+			grade = await this.geminiService.gradeAnswer({
+				question: question.prompt,
+				correctAnswer: question.correctAnswer,
+				sourceTimestamp: question.sourceTimestamp,
+				userAnswer,
+			});
+		} catch (error) {
+			const reason = error instanceof Error ? error.message : String(error);
+			await ctx.reply(`I could not grade that answer right now. ${reason}`);
+			return;
+		}
 
 		const nextScore = grade.isCorrect ? active.score + 1 : active.score;
 		const nextIndex = active.currentQuestionIndex + 1;
