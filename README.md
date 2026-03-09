@@ -1,12 +1,12 @@
 # YouTube Quiz Telegram Bot
 
-This Bun app polls your YouTube watch history page and sends a 3-question free-response quiz to Telegram for newly watched videos. Gemini generates each quiz and also judges every answer.
+This Bun app polls your YouTube watch history page and sends a 5-question free-response quiz to Telegram for newly watched videos. Gemini generates each quiz and also judges every answer.
 
 ## What it does
 
 1. Polls each linked user's YouTube history feed using provided cookies on an interval.
 2. Filters to videos at least 5 minutes long and watched at least 75%.
-3. Generates a 3-question free-response quiz with Gemini from the actual YouTube video URL.
+3. Generates a 5-question free-response quiz with Gemini from the actual YouTube video URL.
 4. Sends quiz questions through Telegram.
 5. Uses Gemini again to judge each user answer.
 6. Keeps at most 3 active quizzes per user at a time.
@@ -40,6 +40,8 @@ Then in Telegram:
 - `/start` registers your Telegram user/chat.
 - `/link` asks for a YouTube Cookie header string.
 - `/status` shows your active quiz progress.
+- `/stats` shows completed quizzes and aggregate score.
+- `/refresh` triggers an immediate history poll for new quizzes.
 
 ## Notes and limitation
 

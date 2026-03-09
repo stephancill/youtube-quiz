@@ -40,7 +40,7 @@ const callGemini = async (
 	return text;
 };
 
-const quizPrompt = `Generate exactly 3 free-response quiz questions from the actual video content.
+const quizPrompt = `Generate exactly 5 free-response quiz questions from the actual video content.
 Each question object must include:
 - prompt
 - correctAnswer
@@ -63,7 +63,7 @@ const quiz = JSON.parse(quizRaw) as {
 	}>;
 };
 
-const questions = (quiz.questions ?? []).slice(0, 3).map((q) => ({
+const questions = (quiz.questions ?? []).slice(0, 5).map((q) => ({
 	prompt: q.prompt ?? "",
 	correctAnswer: q.correctAnswer ?? "",
 	sourceTimestamp: q.sourceTimestamp ?? "00:00",

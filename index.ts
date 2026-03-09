@@ -21,6 +21,10 @@ const poller = new WatchHistoryPoller(
 	quizBot.getTelegramApi(),
 );
 
+quizBot.setRefreshHistoryHandler(async () => {
+	await poller.pollOnce();
+});
+
 const port = Number.parseInt(process.env.PORT ?? "", 10);
 
 if (Number.isFinite(port) && port > 0) {

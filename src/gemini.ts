@@ -11,9 +11,10 @@ const quizSchema = z.object({
 				prompt: z.string().min(1),
 				correctAnswer: z.string().min(1),
 				sourceTimestamp: z.string().regex(/^\d{2}:\d{2}$/),
+				hint: z.string().min(1),
 			}),
 		)
-		.length(3),
+		.length(5),
 });
 
 const gradeSchema = z.object({
@@ -39,11 +40,12 @@ Metadata (for context only):
 
 Requirements:
 - Use information from the video itself, not just the title.
-- Produce exactly 3 free-response questions.
+- Produce exactly 5 free-response questions.
 - Each question must have:
   - prompt: concrete question about facts/claims/examples in the video
   - correctAnswer: concise canonical answer
   - sourceTimestamp: MM:SS where the answer is supported in the video
+  - hint: one short contextual clue that helps recall the answer without revealing it directly
 - Questions must be specific enough that a user who watched the video can answer from memory.
 - Do NOT ask meta questions like "what is this video about".
 
@@ -53,13 +55,14 @@ If the video cannot be accessed or analyzed, return:
 Return strict JSON only:
 {
   "questions": [
-    {
-      "prompt": "...",
-      "correctAnswer": "...",
-      "sourceTimestamp": "MM:SS"
-    }
-  ]
-}`;
+     {
+       "prompt": "...",
+       "correctAnswer": "...",
+       "sourceTimestamp": "MM:SS",
+       "hint": "..."
+     }
+   ]
+ }`;
 
 		const raw = await this.generateJson([
 			{ text: prompt },
@@ -70,7 +73,7 @@ Return strict JSON only:
 			},
 		]);
 		const parsed = quizSchema.parse(raw);
-		if (parsed.questions.length !== 3) {
+		if (parsed.questions.length !== 5) {
 			throw new Error(
 				"Gemini could not ground quiz questions in video content",
 			);

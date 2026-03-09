@@ -2,6 +2,7 @@ export type QuizQuestion = {
 	prompt: string;
 	correctAnswer: string;
 	sourceTimestamp: string;
+	hint?: string;
 };
 
 export type QuizPayload = {
