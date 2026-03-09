@@ -1,3 +1,4 @@
+import { createServer } from "node:http";
 import { QuizBot } from "./src/bot";
 import { config } from "./src/config";
 import { AppDatabase } from "./src/db";
@@ -19,6 +20,17 @@ const poller = new WatchHistoryPoller(
 	quizBot,
 	quizBot.getTelegramApi(),
 );
+
+const port = Number.parseInt(process.env.PORT ?? "", 10);
+
+if (Number.isFinite(port) && port > 0) {
+	createServer((_, res) => {
+		res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
+		res.end("ok");
+	}).listen(port, () => {
+		console.log(`Health server listening on :${port}`);
+	});
+}
 
 poller.start();
 await quizBot.start();
