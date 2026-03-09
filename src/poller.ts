@@ -15,20 +15,53 @@ export class WatchHistoryPoller {
 	) {}
 
 	start() {
-		this.pollOnce().catch((error) => {
-			console.error("Initial poll failed", error);
-		});
-
 		const intervalMs = config.POLL_INTERVAL_MINUTES * 60 * 1000;
-		setInterval(() => {
+		const initialDelayMs = this.getDelayUntilNextBoundary(
+			new Date(),
+			config.POLL_INTERVAL_MINUTES,
+		);
+
+		setTimeout(() => {
 			this.pollOnce().catch((error) => {
-				console.error("Poll failed", error);
+				console.error("Scheduled poll failed", error);
 			});
-		}, intervalMs);
+
+			setInterval(() => {
+				this.pollOnce().catch((error) => {
+					console.error("Poll failed", error);
+				});
+			}, intervalMs);
+		}, initialDelayMs);
+	}
+
+	private getDelayUntilNextBoundary(
+		now: Date,
+		intervalMinutes: number,
+	): number {
+		const minutesSinceMidnight = now.getHours() * 60 + now.getMinutes();
+		const nextBoundaryMinutes =
+			Math.floor(minutesSinceMidnight / intervalMinutes) * intervalMinutes +
+			intervalMinutes;
+
+		const nextBoundary = new Date(now);
+		nextBoundary.setSeconds(0, 0);
+		nextBoundary.setHours(0, 0, 0, 0);
+		nextBoundary.setMinutes(nextBoundaryMinutes);
+
+		if (nextBoundary <= now) {
+			nextBoundary.setMinutes(nextBoundary.getMinutes() + intervalMinutes);
+		}
+
+		return nextBoundary.getTime() - now.getTime();
 	}
 
 	async pollOnce() {
-		const linkedUsers = this.db.getLinkedUsers();
+		const linkedUsers = this.db.getLinkedUsers().filter((user) => {
+			if (config.TELEGRAM_USER_ID_WHITELIST.length === 0) {
+				return true;
+			}
+			return config.TELEGRAM_USER_ID_WHITELIST.includes(user.telegramUserId);
+		});
 
 		for (const user of linkedUsers) {
 			try {
@@ -47,15 +80,9 @@ export class WatchHistoryPoller {
 				);
 
 				const unseen = videos
-					.filter((video) => {
-						if (this.db.hasQuizForVideo(user.telegramUserId, video.id)) {
-							return false;
-						}
-						if (!user.lastPolledPublishedAt) {
-							return true;
-						}
-						return video.publishedAt > user.lastPolledPublishedAt;
-					})
+					.filter(
+						(video) => !this.db.hasQuizForVideo(user.telegramUserId, video.id),
+					)
 					.sort((a, b) => (a.publishedAt > b.publishedAt ? -1 : 1));
 
 				const selected = unseen.slice(0, slotsAvailable);

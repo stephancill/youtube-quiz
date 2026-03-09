@@ -3,6 +3,17 @@ import { z } from "zod";
 const envSchema = z.object({
 	TELEGRAM_BOT_TOKEN: z.string().min(1),
 	GEMINI_API_KEY: z.string().min(1),
+	TELEGRAM_USER_ID_WHITELIST: z
+		.string()
+		.default("")
+		.transform((value) =>
+			value
+				.split(",")
+				.map((entry) => entry.trim())
+				.filter((entry) => entry.length > 0)
+				.map((entry) => Number.parseInt(entry, 10))
+				.filter((entry) => Number.isFinite(entry)),
+		),
 	POLL_INTERVAL_MINUTES: z
 		.string()
 		.default("30")

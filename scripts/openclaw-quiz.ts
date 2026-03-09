@@ -117,15 +117,7 @@ async function pollOnce(): Promise<PollResult> {
 			);
 
 			const unseen = videos
-				.filter((video) => {
-					if (db.hasQuizForVideo(user.telegramUserId, video.id)) {
-						return false;
-					}
-					if (!user.lastPolledPublishedAt) {
-						return true;
-					}
-					return video.publishedAt > user.lastPolledPublishedAt;
-				})
+				.filter((video) => !db.hasQuizForVideo(user.telegramUserId, video.id))
 				.sort((a, b) => (a.publishedAt > b.publishedAt ? -1 : 1));
 
 			const selected = unseen.slice(0, slotsAvailable);

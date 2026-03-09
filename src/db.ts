@@ -21,6 +21,18 @@ type QuizRow = {
 	score: number;
 };
 
+type CompletedQuizStatsRow = {
+	questions_json: string;
+	score: number;
+};
+
+export type UserQuizStats = {
+	completedVideos: number;
+	totalCorrectAnswers: number;
+	totalQuestions: number;
+	correctPercentage: number;
+};
+
 export type ActiveQuizSession = {
 	id: number;
 	telegramUserId: number;
@@ -235,6 +247,16 @@ export class AppDatabase {
 		return row?.count ?? 0;
 	}
 
+	getChatIdForUser(telegramUserId: number): number | null {
+		const row = this.db
+			.prepare(
+				`SELECT chat_id FROM users WHERE telegram_user_id = $telegramUserId LIMIT 1`,
+			)
+			.get({ telegramUserId: telegramUserId }) as { chat_id?: number } | null;
+
+		return row?.chat_id ?? null;
+	}
+
 	advanceQuizSession(
 		quizId: number,
 		nextQuestionIndex: number,
@@ -260,5 +282,37 @@ export class AppDatabase {
 		this.db
 			.prepare(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
 			.run({ quizId: quizId });
+	}
+
+	getUserQuizStats(telegramUserId: number): UserQuizStats {
+		const rows = this.db
+			.prepare(
+				`
+        SELECT questions_json, score
+        FROM quizzes
+        WHERE telegram_user_id = $telegramUserId
+          AND status = 'completed'
+      `,
+			)
+			.all({ telegramUserId: telegramUserId }) as CompletedQuizStatsRow[];
+
+		const completedVideos = rows.length;
+		const totalCorrectAnswers = rows.reduce(
+			(total, row) => total + row.score,
+			0,
+		);
+		const totalQuestions = rows.reduce((total, row) => {
+			const questions = JSON.parse(row.questions_json) as unknown[];
+			return total + questions.length;
+		}, 0);
+		const correctPercentage =
+			totalQuestions === 0 ? 0 : (totalCorrectAnswers / totalQuestions) * 100;
+
+		return {
+			completedVideos,
+			totalCorrectAnswers,
+			totalQuestions,
+			correctPercentage,
+		};
 	}
 }

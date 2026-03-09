@@ -1,4 +1,4 @@
-import { Bot, type Context } from "grammy";
+import { Bot, type Context, InlineKeyboard } from "grammy";
 import { config } from "./config";
 import type { AppDatabase } from "./db";
 import type { GeminiService } from "./gemini";
@@ -6,6 +6,7 @@ import type { GeminiService } from "./gemini";
 export class QuizBot {
 	private bot: Bot;
 	private awaitingCookieInput = new Set<number>();
+	private refreshHistoryHandler: (() => Promise<void>) | null = null;
 
 	constructor(
 		private db: AppDatabase,
@@ -23,12 +24,19 @@ export class QuizBot {
 		return this.bot.api;
 	}
 
+	setRefreshHistoryHandler(handler: () => Promise<void>) {
+		this.refreshHistoryHandler = handler;
+	}
+
 	private registerHandlers() {
 		this.bot.catch((error) => {
 			console.error("Telegram bot error", error.error);
 		});
 
 		this.bot.command("start", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
 			if (!ctx.from) {
 				return;
 			}
@@ -39,11 +47,14 @@ export class QuizBot {
 
 			this.db.upsertTelegramUser(ctx.from.id, chatId);
 			await ctx.reply(
-				"Welcome. Use /link to connect YouTube, then I will periodically send 3-question quizzes from your watch history.",
+				"Welcome. Use /link to connect YouTube, then I will periodically send 5-question quizzes from your watch history.",
 			);
 		});
 
 		this.bot.command("link", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
 			if (!ctx.from) {
 				return;
 			}
@@ -60,6 +71,9 @@ export class QuizBot {
 		});
 
 		this.bot.command("status", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
 			if (!ctx.from) {
 				return;
 			}
@@ -77,13 +91,109 @@ export class QuizBot {
 			);
 		});
 
+		this.bot.command("stats", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
+			if (!ctx.from) {
+				return;
+			}
+
+			const stats = this.db.getUserQuizStats(ctx.from.id);
+			await ctx.reply(
+				`Completed videos: ${stats.completedVideos}\nCorrect answers: ${stats.totalCorrectAnswers}/${stats.totalQuestions}\nAggregate score: ${stats.correctPercentage.toFixed(1)}%`,
+			);
+		});
+
+		this.bot.command("refresh", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
+
+			if (!this.refreshHistoryHandler) {
+				await ctx.reply("Refresh is not configured right now.");
+				return;
+			}
+
+			await ctx.reply("Refreshing watch history now...");
+			try {
+				await this.refreshHistoryHandler();
+				await ctx.reply("Refresh complete.");
+			} catch (error) {
+				const message = error instanceof Error ? error.message : String(error);
+				await ctx.reply(`Refresh failed: ${message}`);
+			}
+		});
+
+		this.bot.callbackQuery(/^hint:(\d+):(\d+)$/, async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
+
+			const userId = Number.parseInt(ctx.match[1] ?? "", 10);
+			const questionIndex = Number.parseInt(ctx.match[2] ?? "", 10);
+			if (!ctx.from || ctx.from.id !== userId) {
+				await ctx.answerCallbackQuery({
+					text: "This hint button is not for you.",
+					show_alert: false,
+				});
+				return;
+			}
+
+			const active = this.db.getActiveQuizSession(userId);
+			const question = active?.questions[questionIndex];
+			if (!active || !question) {
+				await ctx.answerCallbackQuery({
+					text: "This quiz is no longer active.",
+					show_alert: false,
+				});
+				return;
+			}
+
+			const contextualHint =
+				question.hint ??
+				"Focus on the key claim or example discussed in the question.";
+
+			const messageText = `Question ${questionIndex + 1}/${active.questions.length}\n${this.escapeHtml(question.prompt)}\n\nHint: ${this.escapeHtml(contextualHint)}\nReply with a short free-form answer.`;
+
+			await ctx.editMessageText(messageText, {
+				parse_mode: "HTML",
+				link_preview_options: { is_disabled: true },
+			});
+
+			await ctx.answerCallbackQuery({
+				text: "Hint revealed",
+				show_alert: false,
+			});
+		});
+
 		this.bot.on("message:text", async (ctx) => {
+			if (!(await this.ensureAuthorizedUser(ctx))) {
+				return;
+			}
 			if (this.awaitingCookieInput.has(ctx.from?.id ?? -1)) {
 				await this.handleCookieLinkMessage(ctx);
 				return;
 			}
 			await this.handleQuizAnswer(ctx);
 		});
+	}
+
+	private async ensureAuthorizedUser(ctx: Context): Promise<boolean> {
+		const userId = ctx.from?.id;
+		if (userId === undefined) {
+			return false;
+		}
+
+		if (
+			config.TELEGRAM_USER_ID_WHITELIST.length > 0 &&
+			!config.TELEGRAM_USER_ID_WHITELIST.includes(userId)
+		) {
+			await ctx.reply("Access denied for this bot.");
+			return false;
+		}
+
+		return true;
 	}
 
 	private async handleCookieLinkMessage(ctx: Context) {
@@ -156,10 +266,27 @@ export class QuizBot {
 			return;
 		}
 
+		const keyboard = new InlineKeyboard().text(
+			"Reveal hint",
+			`hint:${telegramUserId}:${active.currentQuestionIndex}`,
+		);
+
 		await this.bot.api.sendMessage(
 			chatId,
-			`Question ${active.currentQuestionIndex + 1}/${active.questions.length}\n${question.prompt}\n\nHint: relevant moment around ${question.sourceTimestamp}.\nReply with a short free-form answer.`,
+			`Question ${active.currentQuestionIndex + 1}/${active.questions.length}\n${this.escapeHtml(question.prompt)}\n\nReply with a short free-form answer.`,
+			{
+				parse_mode: "HTML",
+				link_preview_options: { is_disabled: true },
+				reply_markup: keyboard,
+			},
 		);
+	}
+
+	private escapeHtml(value: string): string {
+		return value
+			.replaceAll("&", "&amp;")
+			.replaceAll("<", "&lt;")
+			.replaceAll(">", "&gt;");
 	}
 
 	private async handleQuizAnswer(ctx: Context) {
