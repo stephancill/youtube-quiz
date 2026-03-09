@@ -85,9 +85,9 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				$telegramUserId: telegramUserId,
-				$chatId: chatId,
-				$createdAt: now,
+				telegramUserId: telegramUserId,
+				chatId: chatId,
+				createdAt: now,
 			});
 	}
 
@@ -101,8 +101,8 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				$telegramUserId: telegramUserId,
-				$publishedAt: publishedAt,
+				telegramUserId: telegramUserId,
+				publishedAt: publishedAt,
 			});
 	}
 
@@ -116,8 +116,8 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				$telegramUserId: telegramUserId,
-				$cookieHeader: cookieHeader,
+				telegramUserId: telegramUserId,
+				cookieHeader: cookieHeader,
 			});
 	}
 
@@ -149,7 +149,7 @@ export class AppDatabase {
 			.prepare(
 				`SELECT id FROM quizzes WHERE telegram_user_id = $telegramUserId AND video_id = $videoId LIMIT 1`,
 			)
-			.get({ $telegramUserId: telegramUserId, $videoId: videoId });
+			.get({ telegramUserId: telegramUserId, videoId: videoId });
 		return Boolean(row);
 	}
 
@@ -178,12 +178,12 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				$telegramUserId: telegramUserId,
-				$chatId: chatId,
-				$videoId: quiz.videoId,
-				$videoTitle: quiz.videoTitle,
-				$questionsJson: JSON.stringify(quiz.questions),
-				$createdAt: Date.now(),
+				telegramUserId: telegramUserId,
+				chatId: chatId,
+				videoId: quiz.videoId,
+				videoTitle: quiz.videoTitle,
+				questionsJson: JSON.stringify(quiz.questions),
+				createdAt: Date.now(),
 			});
 	}
 
@@ -207,7 +207,7 @@ export class AppDatabase {
         LIMIT 1
       `,
 			)
-			.get({ $telegramUserId: telegramUserId }) as QuizRow | null;
+			.get({ telegramUserId: telegramUserId }) as QuizRow | null;
 
 		if (!row) {
 			return null;
@@ -230,7 +230,7 @@ export class AppDatabase {
 			.prepare(
 				`SELECT COUNT(*) AS count FROM quizzes WHERE telegram_user_id = $telegramUserId AND status = 'active'`,
 			)
-			.get({ $telegramUserId: telegramUserId }) as { count?: number } | null;
+			.get({ telegramUserId: telegramUserId }) as { count?: number } | null;
 
 		return row?.count ?? 0;
 	}
@@ -250,15 +250,15 @@ export class AppDatabase {
       `,
 			)
 			.run({
-				$quizId: quizId,
-				$nextQuestionIndex: nextQuestionIndex,
-				$nextScore: nextScore,
+				quizId: quizId,
+				nextQuestionIndex: nextQuestionIndex,
+				nextScore: nextScore,
 			});
 	}
 
 	completeQuizSession(quizId: number) {
 		this.db
 			.prepare(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
-			.run({ $quizId: quizId });
+			.run({ quizId: quizId });
 	}
 }
