@@ -19,6 +19,13 @@ export class QuizBot {
 
   async start() {
     await this.bot.start();
+    await this.bot.api.setMyCommands([
+      { command: "start", description: "Start the bot" },
+      { command: "link", description: "Link your YouTube account" },
+      { command: "status", description: "Show active quiz" },
+      { command: "stats", description: "Show quiz statistics" },
+      { command: "refresh", description: "Refresh watch history now" },
+    ]);
   }
 
   getTelegramApi() {
