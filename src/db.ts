@@ -139,6 +139,10 @@ export class AppDatabase {
       });
   }
 
+  resetPollBaseline(telegramUserId: number) {
+    this.markVideoPolled(telegramUserId, new Date().toISOString());
+  }
+
   saveYoutubeCookieJar(telegramUserId: number, cookieJar: YoutubeCookieJar) {
     const cookieJarJson = JSON.stringify(cookieJar);
     this.db

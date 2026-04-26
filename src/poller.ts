@@ -142,7 +142,12 @@ export class WatchHistoryPoller {
         );
 
         const unseen = videos
-          .filter((video) => !this.db.hasQuizForVideo(user.telegramUserId, video.id))
+          .filter((video) => {
+            if (this.db.hasQuizForVideo(user.telegramUserId, video.id)) {
+              return false;
+            }
+            return !user.lastPolledPublishedAt || video.publishedAt > user.lastPolledPublishedAt;
+          })
           .sort((a, b) => (a.publishedAt > b.publishedAt ? -1 : 1));
 
         const selected = unseen.slice(0, slotsAvailable);

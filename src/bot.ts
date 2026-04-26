@@ -217,6 +217,7 @@ export class QuizBot {
     try {
       const cookieJar = this.parseCookieJarFromHeader(message.text);
       this.db.saveYoutubeCookieJar(ctx.from.id, cookieJar);
+      this.db.resetPollBaseline(ctx.from.id);
       this.awaitingCookieInput.delete(ctx.from.id);
       await ctx.reply("Cookie jar saved. I will now poll your history feed and generate quizzes.");
     } catch (error) {
