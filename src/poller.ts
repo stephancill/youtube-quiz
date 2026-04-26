@@ -8,6 +8,7 @@ import type { YoutubeService } from "./youtube";
 const POLL_JITTER_FACTOR = 0.15;
 const AUTH_RETRY_MIN_DELAY_MS = 5_000;
 const AUTH_RETRY_MAX_DELAY_MS = 10_000;
+const MAX_ACTIVE_QUIZ_SESSIONS = 10;
 
 export class WatchHistoryPoller {
   constructor(
@@ -125,11 +126,11 @@ export class WatchHistoryPoller {
         console.log(
           `[poller] user=${user.telegramUserId} active_quizzes=${activeQuizCount} last_polled=${user.lastPolledPublishedAt ?? "-"}`,
         );
-        if (activeQuizCount >= 3) {
+        if (activeQuizCount >= MAX_ACTIVE_QUIZ_SESSIONS) {
           console.log(`[poller] user=${user.telegramUserId} skipped=active_quiz_limit`);
           continue;
         }
-        const slotsAvailable = 3 - activeQuizCount;
+        const slotsAvailable = MAX_ACTIVE_QUIZ_SESSIONS - activeQuizCount;
 
         const videos = await this.listRecentWatchedVideosWithRetry({
           telegramUserId: user.telegramUserId,
