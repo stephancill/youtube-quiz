@@ -98,6 +98,12 @@ export class AppDatabase {
     } catch {
       // Column already exists.
     }
+
+    try {
+      this.db.exec("ALTER TABLE users ADD COLUMN current_quiz_id INTEGER;");
+    } catch {
+      // Column already exists.
+    }
   }
 
   upsertTelegramUser(telegramUserId: number, chatId: number) {
@@ -316,6 +322,25 @@ export class AppDatabase {
       score: row.score,
       questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
     };
+  }
+
+  setCurrentQuizId(telegramUserId: number, quizId: number) {
+    this.db
+      .query(`UPDATE users SET current_quiz_id = $quizId WHERE telegram_user_id = $telegramUserId`)
+      .run({ $telegramUserId: telegramUserId, $quizId: quizId });
+  }
+
+  clearCurrentQuizId(telegramUserId: number) {
+    this.db
+      .query(`UPDATE users SET current_quiz_id = NULL WHERE telegram_user_id = $telegramUserId`)
+      .run({ $telegramUserId: telegramUserId });
+  }
+
+  getCurrentQuizId(telegramUserId: number): number | null {
+    const row = this.db
+      .query(`SELECT current_quiz_id FROM users WHERE telegram_user_id = $telegramUserId`)
+      .get({ $telegramUserId: telegramUserId }) as { current_quiz_id?: number | null } | null;
+    return row?.current_quiz_id ?? null;
   }
 
   countActiveQuizSessions(telegramUserId: number): number {

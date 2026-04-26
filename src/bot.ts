@@ -7,7 +7,6 @@ import type { YoutubeCookieJar } from "./types";
 export class QuizBot {
   private bot: Bot;
   private awaitingCookieInput = new Set<number>();
-  private activeQuizByUser = new Map<number, number>();
   private refreshHistoryHandler: (() => Promise<void>) | null = null;
 
   constructor(
@@ -290,7 +289,7 @@ export class QuizBot {
       return;
     }
 
-    this.activeQuizByUser.set(telegramUserId, quizId);
+    this.db.setCurrentQuizId(telegramUserId, quizId);
 
     const question = active.questions[active.currentQuestionIndex];
     if (!question) {
@@ -331,8 +330,10 @@ export class QuizBot {
       return;
     }
 
-    const quizId = this.activeQuizByUser.get(ctx.from.id);
-    const active = quizId ? this.db.getQuizSession(quizId) : null;
+    const quizId = this.db.getCurrentQuizId(ctx.from.id);
+    const active = quizId
+      ? this.db.getQuizSession(quizId)
+      : this.db.getActiveQuizSession(ctx.from.id);
     if (!active) {
       if (!text.startsWith("/")) {
         await ctx.reply("No active quiz right now. Use /refresh to check for new quizzes.");
@@ -372,7 +373,7 @@ export class QuizBot {
 
     if (nextIndex >= active.questions.length) {
       this.db.completeQuizSession(active.id);
-      this.activeQuizByUser.delete(ctx.from.id);
+      this.db.clearCurrentQuizId(ctx.from.id);
       await ctx.reply(`Quiz complete. Final score: ${nextScore}/${active.questions.length}`);
       return;
     }
