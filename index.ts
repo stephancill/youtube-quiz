@@ -8,7 +8,7 @@ import { YoutubeService } from "./src/youtube";
 
 const db = new AppDatabase(config.DATABASE_PATH);
 
-const youtubeService = new YoutubeService();
+const youtubeService = new YoutubeService(db);
 
 const geminiService = new GeminiService(config.GEMINI_API_KEY);
 const quizBot = new QuizBot(db, geminiService);
@@ -38,4 +38,6 @@ if (Number.isFinite(port) && port > 0) {
 
 poller.start();
 await quizBot.start();
-console.log("Telegram bot started. Use /link to submit YouTube cookie JSON.");
+console.log(
+	"Telegram bot started. Use /link to submit a YouTube Cookie header string.",
+);

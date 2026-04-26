@@ -24,9 +24,21 @@ export type YoutubeVideo = {
 	watchedRatio: number;
 };
 
+export type YoutubeCookie = {
+	value: string;
+	expiresAt: string | null;
+	domain: string | null;
+	path: string | null;
+	secure: boolean;
+	httpOnly: boolean;
+	sameSite: string | null;
+};
+
+export type YoutubeCookieJar = Record<string, YoutubeCookie>;
+
 export type LinkedUser = {
 	telegramUserId: number;
 	chatId: number;
-	youtubeCookieHeader: string;
+	youtubeCookieJar: YoutubeCookieJar;
 	lastPolledPublishedAt: string | null;
 };

@@ -1,14 +1,27 @@
 import { Database } from "bun:sqlite";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import type { LinkedUser, QuizPayload } from "./types";
+import { z } from "zod";
+import type { LinkedUser, QuizPayload, YoutubeCookieJar } from "./types";
 
 type LinkedUserRow = {
 	telegram_user_id: number;
 	chat_id: number;
-	youtube_cookie_header: string;
+	youtube_cookie_jar_json: string;
 	last_polled_published_at: string | null;
 };
+
+const youtubeCookieSchema = z.object({
+	value: z.string(),
+	expiresAt: z.string().datetime().nullable(),
+	domain: z.string().nullable(),
+	path: z.string().nullable(),
+	secure: z.boolean(),
+	httpOnly: z.boolean(),
+	sameSite: z.string().nullable(),
+});
+
+const youtubeCookieJarSchema = z.record(z.string(), youtubeCookieSchema);
 
 type QuizRow = {
 	id: number;
@@ -118,18 +131,19 @@ export class AppDatabase {
 			});
 	}
 
-	saveYoutubeCookieHeader(telegramUserId: number, cookieHeader: string) {
+	saveYoutubeCookieJar(telegramUserId: number, cookieJar: YoutubeCookieJar) {
+		const cookieJarJson = JSON.stringify(cookieJar);
 		this.db
 			.query(
 				`
         UPDATE users
-        SET youtube_cookies_json = $cookieHeader
+        SET youtube_cookies_json = $cookieJarJson
         WHERE telegram_user_id = $telegramUserId
       `,
 			)
 			.run({
 				$telegramUserId: telegramUserId,
-				$cookieHeader: cookieHeader,
+				$cookieJarJson: cookieJarJson,
 			});
 	}
 
@@ -140,7 +154,7 @@ export class AppDatabase {
         SELECT
           telegram_user_id,
           chat_id,
-          youtube_cookies_json AS youtube_cookie_header,
+          youtube_cookies_json AS youtube_cookie_jar_json,
           last_polled_published_at
         FROM users
         WHERE youtube_cookies_json IS NOT NULL
@@ -148,12 +162,40 @@ export class AppDatabase {
 			)
 			.all() as LinkedUserRow[];
 
-		return rows.map((row) => ({
-			telegramUserId: row.telegram_user_id,
-			chatId: row.chat_id,
-			youtubeCookieHeader: row.youtube_cookie_header,
-			lastPolledPublishedAt: row.last_polled_published_at ?? null,
-		}));
+		const linkedUsers: LinkedUser[] = [];
+
+		for (const row of rows) {
+			const parsed = this.parseYoutubeCookieJarJson(
+				row.youtube_cookie_jar_json,
+			);
+			if (!parsed) {
+				continue;
+			}
+
+			linkedUsers.push({
+				telegramUserId: row.telegram_user_id,
+				chatId: row.chat_id,
+				youtubeCookieJar: parsed,
+				lastPolledPublishedAt: row.last_polled_published_at ?? null,
+			});
+		}
+
+		return linkedUsers;
+	}
+
+	private parseYoutubeCookieJarJson(
+		rawCookieJarJson: string,
+	): YoutubeCookieJar | null {
+		try {
+			const parsedJson = JSON.parse(rawCookieJarJson) as unknown;
+			const result = youtubeCookieJarSchema.safeParse(parsedJson);
+			if (!result.success) {
+				return null;
+			}
+			return result.data;
+		} catch {
+			return null;
+		}
 	}
 
 	hasQuizForVideo(telegramUserId: number, videoId: string): boolean {

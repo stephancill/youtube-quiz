@@ -6,7 +6,10 @@
 	"scripts": {
 		"dev": "bun --hot index.ts",
 		"start": "bun index.ts",
-		"check": "bunx tsc --noEmit"
+		"check": "bunx tsc --noEmit",
+		"test:history-fetch": "bun scripts/test-history-fetch.ts",
+		"investigation:history-poll": "bun scripts/investigation-history-poll.ts",
+		"investigation:standalone-replay": "bun scripts/investigation-standalone-replay.ts"
 	},
 	"dependencies": {
 		"grammy": "^1.41.1",

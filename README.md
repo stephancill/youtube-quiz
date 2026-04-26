@@ -49,3 +49,65 @@ Then in Telegram:
 - Shorts are excluded because only entries with duration `>= 5:00` are accepted.
 - Watch percentage is inferred from YouTube thumbnail progress overlays.
 - If cookies expire or become invalid, polling notifies the user to re-link with `/link`.
+
+## Continuous polling investigation script
+
+Use this script when you want long-running polling with browser-level auth/session parity (cookies + local/session storage + runtime config) instead of manually replaying just a static `Cookie` header.
+
+1. Start Chrome with remote debugging and a persistent profile, then sign in to YouTube in that Chrome session:
+
+```bash
+"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" \
+  --remote-debugging-port=9222 \
+  --user-data-dir="$HOME/.youtube-quiz-chrome"
+```
+
+2. In that Chrome window, confirm `https://www.youtube.com/feed/history` loads as your signed-in history page.
+
+3. Run the investigation poller:
+
+```bash
+bun run investigation:history-poll --repeat 30 --interval-ms 60000 --out logs/history-poll.ndjson --state-out logs/history-state.json
+```
+
+4. Verify output:
+
+- Console logs should show `auth=true` across iterations.
+- `logs/history-poll.ndjson` should contain one JSON line per poll with auth markers, cookies visible to JS, local/session storage keys, selected runtime config, and extracted videos.
+- `logs/history-state.json` should contain the latest state snapshot (`requiredState` + `ytConfig`) for quick debugging.
+
+### Captured browser-derived state fields
+
+The script captures and logs these fields each poll to keep request/session parity observable:
+
+- Local/session storage: `DELEGATED_SESSION_ID`, `SESSION_INDEX`, `VISITOR_INFO1_LIVE`, `VISITOR_PRIVACY_METADATA`, `yt-remote-device-id`, `yt-player-headers-readable`.
+- Runtime config (`ytcfg`): `INNERTUBE_API_KEY`, `INNERTUBE_CONTEXT_CLIENT_NAME`, `INNERTUBE_CONTEXT_CLIENT_VERSION`, `VISITOR_DATA`, `SESSION_INDEX`, `DELEGATED_SESSION_ID`.
+- Cookie visibility: browser-readable cookie names present in `document.cookie`.
+
+## Standalone replay prototype
+
+This script replays the authenticated request path without a live CDP connection during polling. It bootstraps from a previously captured investigation NDJSON file, derives header/template fields, computes `SAPISIDHASH` auth dynamically each request, and merges rolling `Set-Cookie` updates locally.
+
+Run it after you have at least one capture log from `investigation:history-poll`:
+
+```bash
+bun run investigation:standalone-replay --source-log logs/history-poll-15m.ndjson --repeat 8 --interval-ms 15000 --out logs/standalone-replay.ndjson --state-out logs/standalone-replay-state.json
+```
+
+Optional override if you want to force a cookie bootstrap:
+
+```bash
+bun run investigation:standalone-replay --source-log logs/history-poll-15m.ndjson --cookie-header 'SID=...; SAPISID=...; APISID=...'
+```
+
+Drift-protection knobs:
+
+- `--rebootstrap-on-auth-failure true` (default): reloads template/cookies from `--source-log` after repeated auth failures.
+- `--max-consecutive-auth-failures 2` (default): threshold before re-bootstrap.
+- Standalone replay now rolls back to the last known-good in-memory cookie jar on failed iterations to avoid persisting a bad state.
+
+Verification signals:
+
+- `youtubei.status` stays `200`.
+- `youtubei.hasSapisidHashAuthorization` is always true.
+- `history.looksAuthPage` remains false and `history.videoCountHint` stays above your expected threshold.

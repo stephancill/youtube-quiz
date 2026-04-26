@@ -2,6 +2,7 @@ import { Bot, type Context, InlineKeyboard } from "grammy";
 import { config } from "./config";
 import type { AppDatabase } from "./db";
 import type { GeminiService } from "./gemini";
+import type { YoutubeCookieJar } from "./types";
 
 export class QuizBot {
 	private bot: Bot;
@@ -207,11 +208,11 @@ export class QuizBot {
 		}
 
 		try {
-			const cookieHeader = this.validateCookieHeader(message.text);
-			this.db.saveYoutubeCookieHeader(ctx.from.id, cookieHeader);
+			const cookieJar = this.parseCookieJarFromHeader(message.text);
+			this.db.saveYoutubeCookieJar(ctx.from.id, cookieJar);
 			this.awaitingCookieInput.delete(ctx.from.id);
 			await ctx.reply(
-				"Cookie header saved. I will now poll your history feed and generate quizzes.",
+				"Cookie jar saved. I will now poll your history feed and generate quizzes.",
 			);
 		} catch (error) {
 			const message =
@@ -222,7 +223,7 @@ export class QuizBot {
 		}
 	}
 
-	private validateCookieHeader(input: string): string {
+	private parseCookieJarFromHeader(input: string): YoutubeCookieJar {
 		const normalized = input.trim();
 		if (!normalized) {
 			throw new Error("empty string");
@@ -237,7 +238,36 @@ export class QuizBot {
 			throw new Error("missing key=value pairs");
 		}
 
-		return pairs.join("; ");
+		const cookieJar: YoutubeCookieJar = {};
+
+		for (const pair of pairs) {
+			const separatorIndex = pair.indexOf("=");
+			if (separatorIndex <= 0) {
+				continue;
+			}
+
+			const cookieName = pair.slice(0, separatorIndex).trim();
+			const cookieValue = pair.slice(separatorIndex + 1);
+			if (!cookieName) {
+				continue;
+			}
+
+			cookieJar[cookieName] = {
+				value: cookieValue,
+				expiresAt: null,
+				domain: null,
+				path: null,
+				secure: false,
+				httpOnly: false,
+				sameSite: null,
+			};
+		}
+
+		if (Object.keys(cookieJar).length === 0) {
+			throw new Error("missing key=value pairs");
+		}
+
+		return cookieJar;
 	}
 
 	async sendQuizIntro(input: {
@@ -306,7 +336,9 @@ export class QuizBot {
 		const active = this.db.getActiveQuizSession(ctx.from.id);
 		if (!active) {
 			if (!text.startsWith("/")) {
-				await ctx.reply("No active quiz right now. Use /refresh to check for new quizzes.");
+				await ctx.reply(
+					"No active quiz right now. Use /refresh to check for new quizzes.",
+				);
 			}
 			return;
 		}
