@@ -205,8 +205,8 @@ export class AppDatabase {
     return Boolean(row);
   }
 
-  createQuizSession(telegramUserId: number, chatId: number, quiz: QuizPayload) {
-    this.db
+  createQuizSession(telegramUserId: number, chatId: number, quiz: QuizPayload): number {
+    const result = this.db
       .query(
         `
         INSERT INTO quizzes (
@@ -237,6 +237,7 @@ export class AppDatabase {
         $questionsJson: JSON.stringify(quiz.questions),
         $createdAt: Date.now(),
       });
+    return Number(result.lastInsertRowid);
   }
 
   getActiveQuizSession(telegramUserId: number): ActiveQuizSession | null {
@@ -264,6 +265,42 @@ export class AppDatabase {
         $telegramUserId: telegramUserId,
         $activeSince: Date.now() - ACTIVE_QUIZ_WINDOW_MS,
       }) as QuizRow | null;
+
+    if (!row) {
+      return null;
+    }
+
+    return {
+      id: row.id,
+      telegramUserId: row.telegram_user_id,
+      chatId: row.chat_id,
+      videoId: row.video_id,
+      videoTitle: row.video_title,
+      currentQuestionIndex: row.current_question_index,
+      score: row.score,
+      questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
+    };
+  }
+
+  getQuizSession(quizId: number): ActiveQuizSession | null {
+    const row = this.db
+      .query(
+        `
+        SELECT
+          id,
+          telegram_user_id,
+          chat_id,
+          video_id,
+          video_title,
+          questions_json,
+          current_question_index,
+          score
+        FROM quizzes
+        WHERE id = $quizId
+          AND status = 'active'
+      `,
+      )
+      .get({ $quizId: quizId }) as QuizRow | null;
 
     if (!row) {
       return null;

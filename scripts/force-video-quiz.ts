@@ -30,8 +30,9 @@ if (!ignoreActiveLimit && activeQuizCount >= MAX_ACTIVE_QUIZ_SESSIONS) {
 const metadata = await fetchVideoMetadata(videoId);
 const quiz = await generateQuizWithFallback(videoId, metadata.title, metadata.authorName);
 
-db.createQuizSession(telegramUserId, chatId, quiz);
+const quizId = db.createQuizSession(telegramUserId, chatId, quiz);
 await quizBot.sendQuizIntro({
+  quizId,
   telegramUserId,
   chatId,
   videoId,

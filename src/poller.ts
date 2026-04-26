@@ -162,8 +162,9 @@ export class WatchHistoryPoller {
               channelTitle: video.channelTitle,
             });
 
-            this.db.createQuizSession(user.telegramUserId, user.chatId, quiz);
+            const quizId = this.db.createQuizSession(user.telegramUserId, user.chatId, quiz);
             await this.quizBot.sendQuizIntro({
+              quizId,
               telegramUserId: user.telegramUserId,
               chatId: user.chatId,
               videoId: video.id,
