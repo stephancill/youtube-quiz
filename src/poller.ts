@@ -155,23 +155,30 @@ export class WatchHistoryPoller {
           console.log(
             `[poller] user=${user.telegramUserId} generating_quiz video_id=${video.id} published_at=${video.publishedAt}`,
           );
-          const quiz = await this.geminiService.generateQuiz({
-            videoId: video.id,
-            videoTitle: video.title,
-            channelTitle: video.channelTitle,
-          });
+          try {
+            const quiz = await this.geminiService.generateQuiz({
+              videoId: video.id,
+              videoTitle: video.title,
+              channelTitle: video.channelTitle,
+            });
 
-          this.db.createQuizSession(user.telegramUserId, user.chatId, quiz);
-          await this.quizBot.sendQuizIntro({
-            telegramUserId: user.telegramUserId,
-            chatId: user.chatId,
-            videoId: video.id,
-            videoTitle: video.title,
-          });
-          if (!newestProcessedPublishedAt || video.publishedAt > newestProcessedPublishedAt) {
-            newestProcessedPublishedAt = video.publishedAt;
+            this.db.createQuizSession(user.telegramUserId, user.chatId, quiz);
+            await this.quizBot.sendQuizIntro({
+              telegramUserId: user.telegramUserId,
+              chatId: user.chatId,
+              videoId: video.id,
+              videoTitle: video.title,
+            });
+            if (!newestProcessedPublishedAt || video.publishedAt > newestProcessedPublishedAt) {
+              newestProcessedPublishedAt = video.publishedAt;
+            }
+            activeQuizCount += 1;
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.error(
+              `[poller] user=${user.telegramUserId} skip_video=${video.id} reason=${message}`,
+            );
           }
-          activeQuizCount += 1;
         }
 
         if (newestProcessedPublishedAt) {
