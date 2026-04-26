@@ -369,7 +369,11 @@ export class QuizBot {
     const nextIndex = active.currentQuestionIndex + 1;
     this.db.advanceQuizSession(active.id, nextIndex, nextScore);
 
-    await ctx.reply(`${grade.isCorrect ? "Correct" : "Not quite"}. ${grade.feedback}`);
+    await ctx.reply(
+      grade.isCorrect
+        ? `Correct. ${grade.feedback}`
+        : `Not quite. ${grade.feedback}\n\nCorrect answer: ${question.correctAnswer}`,
+    );
 
     if (nextIndex >= active.questions.length) {
       this.db.completeQuizSession(active.id);
