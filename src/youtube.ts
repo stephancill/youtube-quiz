@@ -45,6 +45,83 @@ type RuntimeRequestContext = {
 export class YoutubeService {
 	constructor(private db: AppDatabase) {}
 
+	async validateCookieJar(input: {
+		telegramUserId: number;
+		cookieJar: YoutubeCookieJar;
+	}): Promise<YoutubeCookieJar> {
+		let workingCookieJar: YoutubeCookieJar = { ...input.cookieJar };
+		console.log(
+			`[youtube] user=${input.telegramUserId} validate_start cookie_count=${Object.keys(workingCookieJar).length}`,
+		);
+
+		const firstHistoryResponse = await this.fetchHistoryPage(workingCookieJar);
+		this.logHistoryResponse({
+			telegramUserId: input.telegramUserId,
+			stage: "validate_first_history",
+			response: firstHistoryResponse.response,
+			html: firstHistoryResponse.html,
+		});
+		if (!firstHistoryResponse.response.ok) {
+			throw new Error(
+				`YouTube history validation request failed with ${firstHistoryResponse.response.status}`,
+			);
+		}
+
+		workingCookieJar = this.applyMergedCookieJar(
+			workingCookieJar,
+			firstHistoryResponse.response.headers,
+		);
+
+		const runtimeContext = this.extractRuntimeRequestContext(
+			firstHistoryResponse.html,
+		);
+		workingCookieJar = await this.warmupGuideRequests({
+			telegramUserId: input.telegramUserId,
+			cookieJar: workingCookieJar,
+			runtimeContext,
+		});
+
+		const finalHistoryResponse = await this.fetchHistoryPage(workingCookieJar);
+		this.logHistoryResponse({
+			telegramUserId: input.telegramUserId,
+			stage: "validate_final_history",
+			response: finalHistoryResponse.response,
+			html: finalHistoryResponse.html,
+		});
+		if (!finalHistoryResponse.response.ok) {
+			throw new Error(
+				`YouTube history validation request failed with ${finalHistoryResponse.response.status}`,
+			);
+		}
+
+		workingCookieJar = this.applyMergedCookieJar(
+			workingCookieJar,
+			finalHistoryResponse.response.headers,
+		);
+
+		const ytInitialData = this.extractYtInitialData(finalHistoryResponse.html);
+		const videos = this.extractVideosFromHistoryData(ytInitialData);
+		const isAuthOrConsentResponse =
+			videos.length === 0 &&
+			this.looksLikeAuthOrConsentPage(finalHistoryResponse.html);
+
+		if (isAuthOrConsentResponse) {
+			this.logAuthOrConsentDiagnostics({
+				telegramUserId: input.telegramUserId,
+				response: finalHistoryResponse.response,
+				html: finalHistoryResponse.html,
+			});
+			throw new Error(
+				"YouTube cookies appear expired or invalid. Please paste a fresh Cookie header from an authenticated YouTube tab.",
+			);
+		}
+
+		console.log(
+			`[youtube] user=${input.telegramUserId} validate_complete videos=${videos.length} cookie_count=${Object.keys(workingCookieJar).length}`,
+		);
+		return workingCookieJar;
+	}
+
 	async listRecentWatchedVideos(
 		user: LinkedUser,
 		maxResults: number,

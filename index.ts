@@ -11,7 +11,7 @@ const db = new AppDatabase(config.DATABASE_PATH);
 const youtubeService = new YoutubeService(db);
 
 const geminiService = new GeminiService(config.GEMINI_API_KEY);
-const quizBot = new QuizBot(db, geminiService);
+const quizBot = new QuizBot(db, geminiService, youtubeService);
 
 const poller = new WatchHistoryPoller(
 	db,
