@@ -7,69 +7,69 @@ import type { LinkedUser, QuizPayload, YoutubeCookieJar } from "./types";
 const ACTIVE_QUIZ_WINDOW_MS = 24 * 60 * 60 * 1000;
 
 type LinkedUserRow = {
-  telegram_user_id: number;
-  chat_id: number;
-  youtube_cookie_jar_json: string;
-  last_polled_published_at: string | null;
+	telegram_user_id: number;
+	chat_id: number;
+	youtube_cookie_jar_json: string;
+	last_polled_published_at: string | null;
 };
 
 const youtubeCookieSchema = z.object({
-  value: z.string(),
-  expiresAt: z.string().datetime().nullable(),
-  domain: z.string().nullable(),
-  path: z.string().nullable(),
-  secure: z.boolean(),
-  httpOnly: z.boolean(),
-  sameSite: z.string().nullable(),
+	value: z.string(),
+	expiresAt: z.string().datetime().nullable(),
+	domain: z.string().nullable(),
+	path: z.string().nullable(),
+	secure: z.boolean(),
+	httpOnly: z.boolean(),
+	sameSite: z.string().nullable(),
 });
 
 const youtubeCookieJarSchema = z.record(z.string(), youtubeCookieSchema);
 
 type QuizRow = {
-  id: number;
-  telegram_user_id: number;
-  chat_id: number;
-  video_id: string;
-  video_title: string;
-  questions_json: string;
-  current_question_index: number;
-  score: number;
+	id: number;
+	telegram_user_id: number;
+	chat_id: number;
+	video_id: string;
+	video_title: string;
+	questions_json: string;
+	current_question_index: number;
+	score: number;
 };
 
 type CompletedQuizStatsRow = {
-  questions_json: string;
-  score: number;
+	questions_json: string;
+	score: number;
 };
 
 export type UserQuizStats = {
-  completedVideos: number;
-  totalCorrectAnswers: number;
-  totalQuestions: number;
-  correctPercentage: number;
+	completedVideos: number;
+	totalCorrectAnswers: number;
+	totalQuestions: number;
+	correctPercentage: number;
 };
 
 export type ActiveQuizSession = {
-  id: number;
-  telegramUserId: number;
-  chatId: number;
-  videoId: string;
-  videoTitle: string;
-  currentQuestionIndex: number;
-  score: number;
-  questions: QuizPayload["questions"];
+	id: number;
+	telegramUserId: number;
+	chatId: number;
+	videoId: string;
+	videoTitle: string;
+	currentQuestionIndex: number;
+	score: number;
+	questions: QuizPayload["questions"];
 };
 
 export class AppDatabase {
-  private db: Database;
+	private db: Database;
 
-  constructor(dbPath: string) {
-    mkdirSync(dirname(dbPath), { recursive: true });
-    this.db = new Database(dbPath);
-    this.migrate();
-  }
+	constructor(dbPath: string) {
+		mkdirSync(dirname(dbPath), { recursive: true });
+		this.db = new Database(dbPath);
+		this.migrate();
+	}
 
-  private migrate() {
-    this.db.exec(`
+	private migrate() {
+		this.db.exec(`
       CREATE TABLE IF NOT EXISTS users (
         telegram_user_id INTEGER PRIMARY KEY,
         chat_id INTEGER NOT NULL,
@@ -86,83 +86,83 @@ export class AppDatabase {
         video_title TEXT NOT NULL,
         questions_json TEXT NOT NULL,
         current_question_index INTEGER NOT NULL DEFAULT 0,
-        score INTEGER NOT NULL DEFAULT 0,
+        score REAL NOT NULL DEFAULT 0,
         status TEXT NOT NULL,
         created_at INTEGER NOT NULL,
         UNIQUE(telegram_user_id, video_id)
       );
     `);
 
-    try {
-      this.db.exec("ALTER TABLE users ADD COLUMN youtube_cookies_json TEXT;");
-    } catch {
-      // Column already exists.
-    }
+		try {
+			this.db.exec("ALTER TABLE users ADD COLUMN youtube_cookies_json TEXT;");
+		} catch {
+			// Column already exists.
+		}
 
-    try {
-      this.db.exec("ALTER TABLE users ADD COLUMN current_quiz_id INTEGER;");
-    } catch {
-      // Column already exists.
-    }
-  }
+		try {
+			this.db.exec("ALTER TABLE users ADD COLUMN current_quiz_id INTEGER;");
+		} catch {
+			// Column already exists.
+		}
+	}
 
-  upsertTelegramUser(telegramUserId: number, chatId: number) {
-    const now = Date.now();
-    this.db
-      .query(
-        `
+	upsertTelegramUser(telegramUserId: number, chatId: number) {
+		const now = Date.now();
+		this.db
+			.query(
+				`
         INSERT INTO users (telegram_user_id, chat_id, created_at)
         VALUES ($telegramUserId, $chatId, $createdAt)
         ON CONFLICT(telegram_user_id)
         DO UPDATE SET chat_id = $chatId
       `,
-      )
-      .run({
-        $telegramUserId: telegramUserId,
-        $chatId: chatId,
-        $createdAt: now,
-      });
-  }
+			)
+			.run({
+				$telegramUserId: telegramUserId,
+				$chatId: chatId,
+				$createdAt: now,
+			});
+	}
 
-  markVideoPolled(telegramUserId: number, publishedAt: string) {
-    this.db
-      .query(
-        `
+	markVideoPolled(telegramUserId: number, publishedAt: string) {
+		this.db
+			.query(
+				`
         UPDATE users
         SET last_polled_published_at = $publishedAt
         WHERE telegram_user_id = $telegramUserId
       `,
-      )
-      .run({
-        $telegramUserId: telegramUserId,
-        $publishedAt: publishedAt,
-      });
-  }
+			)
+			.run({
+				$telegramUserId: telegramUserId,
+				$publishedAt: publishedAt,
+			});
+	}
 
-  resetPollBaseline(telegramUserId: number) {
-    this.markVideoPolled(telegramUserId, new Date().toISOString());
-  }
+	resetPollBaseline(telegramUserId: number) {
+		this.markVideoPolled(telegramUserId, new Date().toISOString());
+	}
 
-  saveYoutubeCookieJar(telegramUserId: number, cookieJar: YoutubeCookieJar) {
-    const cookieJarJson = JSON.stringify(cookieJar);
-    this.db
-      .query(
-        `
+	saveYoutubeCookieJar(telegramUserId: number, cookieJar: YoutubeCookieJar) {
+		const cookieJarJson = JSON.stringify(cookieJar);
+		this.db
+			.query(
+				`
         UPDATE users
         SET youtube_cookies_json = $cookieJarJson
         WHERE telegram_user_id = $telegramUserId
       `,
-      )
-      .run({
-        $telegramUserId: telegramUserId,
-        $cookieJarJson: cookieJarJson,
-      });
-  }
+			)
+			.run({
+				$telegramUserId: telegramUserId,
+				$cookieJarJson: cookieJarJson,
+			});
+	}
 
-  getLinkedUsers(): LinkedUser[] {
-    const rows = this.db
-      .query(
-        `
+	getLinkedUsers(): LinkedUser[] {
+		const rows = this.db
+			.query(
+				`
         SELECT
           telegram_user_id,
           chat_id,
@@ -171,54 +171,62 @@ export class AppDatabase {
         FROM users
         WHERE youtube_cookies_json IS NOT NULL
       `,
-      )
-      .all() as LinkedUserRow[];
+			)
+			.all() as LinkedUserRow[];
 
-    const linkedUsers: LinkedUser[] = [];
+		const linkedUsers: LinkedUser[] = [];
 
-    for (const row of rows) {
-      const parsed = this.parseYoutubeCookieJarJson(row.youtube_cookie_jar_json);
-      if (!parsed) {
-        continue;
-      }
+		for (const row of rows) {
+			const parsed = this.parseYoutubeCookieJarJson(
+				row.youtube_cookie_jar_json,
+			);
+			if (!parsed) {
+				continue;
+			}
 
-      linkedUsers.push({
-        telegramUserId: row.telegram_user_id,
-        chatId: row.chat_id,
-        youtubeCookieJar: parsed,
-        lastPolledPublishedAt: row.last_polled_published_at ?? null,
-      });
-    }
+			linkedUsers.push({
+				telegramUserId: row.telegram_user_id,
+				chatId: row.chat_id,
+				youtubeCookieJar: parsed,
+				lastPolledPublishedAt: row.last_polled_published_at ?? null,
+			});
+		}
 
-    return linkedUsers;
-  }
+		return linkedUsers;
+	}
 
-  private parseYoutubeCookieJarJson(rawCookieJarJson: string): YoutubeCookieJar | null {
-    try {
-      const parsedJson = JSON.parse(rawCookieJarJson) as unknown;
-      const result = youtubeCookieJarSchema.safeParse(parsedJson);
-      if (!result.success) {
-        return null;
-      }
-      return result.data;
-    } catch {
-      return null;
-    }
-  }
+	private parseYoutubeCookieJarJson(
+		rawCookieJarJson: string,
+	): YoutubeCookieJar | null {
+		try {
+			const parsedJson = JSON.parse(rawCookieJarJson) as unknown;
+			const result = youtubeCookieJarSchema.safeParse(parsedJson);
+			if (!result.success) {
+				return null;
+			}
+			return result.data;
+		} catch {
+			return null;
+		}
+	}
 
-  hasQuizForVideo(telegramUserId: number, videoId: string): boolean {
-    const row = this.db
-      .query(
-        `SELECT id FROM quizzes WHERE telegram_user_id = $telegramUserId AND video_id = $videoId LIMIT 1`,
-      )
-      .get({ $telegramUserId: telegramUserId, $videoId: videoId });
-    return Boolean(row);
-  }
+	hasQuizForVideo(telegramUserId: number, videoId: string): boolean {
+		const row = this.db
+			.query(
+				`SELECT id FROM quizzes WHERE telegram_user_id = $telegramUserId AND video_id = $videoId LIMIT 1`,
+			)
+			.get({ $telegramUserId: telegramUserId, $videoId: videoId });
+		return Boolean(row);
+	}
 
-  createQuizSession(telegramUserId: number, chatId: number, quiz: QuizPayload): number {
-    const result = this.db
-      .query(
-        `
+	createQuizSession(
+		telegramUserId: number,
+		chatId: number,
+		quiz: QuizPayload,
+	): number {
+		const result = this.db
+			.query(
+				`
         INSERT INTO quizzes (
           telegram_user_id,
           chat_id,
@@ -238,22 +246,22 @@ export class AppDatabase {
           $createdAt
         )
       `,
-      )
-      .run({
-        $telegramUserId: telegramUserId,
-        $chatId: chatId,
-        $videoId: quiz.videoId,
-        $videoTitle: quiz.videoTitle,
-        $questionsJson: JSON.stringify(quiz.questions),
-        $createdAt: Date.now(),
-      });
-    return Number(result.lastInsertRowid);
-  }
+			)
+			.run({
+				$telegramUserId: telegramUserId,
+				$chatId: chatId,
+				$videoId: quiz.videoId,
+				$videoTitle: quiz.videoTitle,
+				$questionsJson: JSON.stringify(quiz.questions),
+				$createdAt: Date.now(),
+			});
+		return Number(result.lastInsertRowid);
+	}
 
-  getActiveQuizSession(telegramUserId: number): ActiveQuizSession | null {
-    const row = this.db
-      .query(
-        `
+	getActiveQuizSession(telegramUserId: number): ActiveQuizSession | null {
+		const row = this.db
+			.query(
+				`
         SELECT
           id,
           telegram_user_id,
@@ -270,32 +278,32 @@ export class AppDatabase {
 	        ORDER BY created_at DESC
 	        LIMIT 1
 	      `,
-      )
-      .get({
-        $telegramUserId: telegramUserId,
-        $activeSince: Date.now() - ACTIVE_QUIZ_WINDOW_MS,
-      }) as QuizRow | null;
+			)
+			.get({
+				$telegramUserId: telegramUserId,
+				$activeSince: Date.now() - ACTIVE_QUIZ_WINDOW_MS,
+			}) as QuizRow | null;
 
-    if (!row) {
-      return null;
-    }
+		if (!row) {
+			return null;
+		}
 
-    return {
-      id: row.id,
-      telegramUserId: row.telegram_user_id,
-      chatId: row.chat_id,
-      videoId: row.video_id,
-      videoTitle: row.video_title,
-      currentQuestionIndex: row.current_question_index,
-      score: row.score,
-      questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
-    };
-  }
+		return {
+			id: row.id,
+			telegramUserId: row.telegram_user_id,
+			chatId: row.chat_id,
+			videoId: row.video_id,
+			videoTitle: row.video_title,
+			currentQuestionIndex: row.current_question_index,
+			score: row.score,
+			questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
+		};
+	}
 
-  getQuizSession(quizId: number): ActiveQuizSession | null {
-    const row = this.db
-      .query(
-        `
+	getQuizSession(quizId: number): ActiveQuizSession | null {
+		const row = this.db
+			.query(
+				`
         SELECT
           id,
           telegram_user_id,
@@ -309,120 +317,137 @@ export class AppDatabase {
         WHERE id = $quizId
           AND status = 'active'
       `,
-      )
-      .get({ $quizId: quizId }) as QuizRow | null;
+			)
+			.get({ $quizId: quizId }) as QuizRow | null;
 
-    if (!row) {
-      return null;
-    }
+		if (!row) {
+			return null;
+		}
 
-    return {
-      id: row.id,
-      telegramUserId: row.telegram_user_id,
-      chatId: row.chat_id,
-      videoId: row.video_id,
-      videoTitle: row.video_title,
-      currentQuestionIndex: row.current_question_index,
-      score: row.score,
-      questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
-    };
-  }
+		return {
+			id: row.id,
+			telegramUserId: row.telegram_user_id,
+			chatId: row.chat_id,
+			videoId: row.video_id,
+			videoTitle: row.video_title,
+			currentQuestionIndex: row.current_question_index,
+			score: row.score,
+			questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
+		};
+	}
 
-  setCurrentQuizId(telegramUserId: number, quizId: number) {
-    this.db
-      .query(`UPDATE users SET current_quiz_id = $quizId WHERE telegram_user_id = $telegramUserId`)
-      .run({ $telegramUserId: telegramUserId, $quizId: quizId });
-  }
+	setCurrentQuizId(telegramUserId: number, quizId: number) {
+		this.db
+			.query(
+				`UPDATE users SET current_quiz_id = $quizId WHERE telegram_user_id = $telegramUserId`,
+			)
+			.run({ $telegramUserId: telegramUserId, $quizId: quizId });
+	}
 
-  clearCurrentQuizId(telegramUserId: number) {
-    this.db
-      .query(`UPDATE users SET current_quiz_id = NULL WHERE telegram_user_id = $telegramUserId`)
-      .run({ $telegramUserId: telegramUserId });
-  }
+	clearCurrentQuizId(telegramUserId: number) {
+		this.db
+			.query(
+				`UPDATE users SET current_quiz_id = NULL WHERE telegram_user_id = $telegramUserId`,
+			)
+			.run({ $telegramUserId: telegramUserId });
+	}
 
-  getCurrentQuizId(telegramUserId: number): number | null {
-    const row = this.db
-      .query(`SELECT current_quiz_id FROM users WHERE telegram_user_id = $telegramUserId`)
-      .get({ $telegramUserId: telegramUserId }) as { current_quiz_id?: number | null } | null;
-    return row?.current_quiz_id ?? null;
-  }
+	getCurrentQuizId(telegramUserId: number): number | null {
+		const row = this.db
+			.query(
+				`SELECT current_quiz_id FROM users WHERE telegram_user_id = $telegramUserId`,
+			)
+			.get({ $telegramUserId: telegramUserId }) as {
+			current_quiz_id?: number | null;
+		} | null;
+		return row?.current_quiz_id ?? null;
+	}
 
-  countActiveQuizSessions(telegramUserId: number): number {
-    const row = this.db
-      .query(
-        `
+	countActiveQuizSessions(telegramUserId: number): number {
+		const row = this.db
+			.query(
+				`
 					SELECT COUNT(*) AS count
 					FROM quizzes
 					WHERE telegram_user_id = $telegramUserId
 						AND status = 'active'
 						AND created_at >= $activeSince
 				`,
-      )
-      .get({
-        $telegramUserId: telegramUserId,
-        $activeSince: Date.now() - ACTIVE_QUIZ_WINDOW_MS,
-      }) as { count?: number } | null;
+			)
+			.get({
+				$telegramUserId: telegramUserId,
+				$activeSince: Date.now() - ACTIVE_QUIZ_WINDOW_MS,
+			}) as { count?: number } | null;
 
-    return row?.count ?? 0;
-  }
+		return row?.count ?? 0;
+	}
 
-  getChatIdForUser(telegramUserId: number): number | null {
-    const row = this.db
-      .query(`SELECT chat_id FROM users WHERE telegram_user_id = $telegramUserId LIMIT 1`)
-      .get({ $telegramUserId: telegramUserId }) as { chat_id?: number } | null;
+	getChatIdForUser(telegramUserId: number): number | null {
+		const row = this.db
+			.query(
+				`SELECT chat_id FROM users WHERE telegram_user_id = $telegramUserId LIMIT 1`,
+			)
+			.get({ $telegramUserId: telegramUserId }) as { chat_id?: number } | null;
 
-    return row?.chat_id ?? null;
-  }
+		return row?.chat_id ?? null;
+	}
 
-  advanceQuizSession(quizId: number, nextQuestionIndex: number, nextScore: number) {
-    this.db
-      .query(
-        `
+	advanceQuizSession(
+		quizId: number,
+		nextQuestionIndex: number,
+		nextScore: number,
+	) {
+		this.db
+			.query(
+				`
         UPDATE quizzes
         SET current_question_index = $nextQuestionIndex,
             score = $nextScore
         WHERE id = $quizId
       `,
-      )
-      .run({
-        $quizId: quizId,
-        $nextQuestionIndex: nextQuestionIndex,
-        $nextScore: nextScore,
-      });
-  }
+			)
+			.run({
+				$quizId: quizId,
+				$nextQuestionIndex: nextQuestionIndex,
+				$nextScore: nextScore,
+			});
+	}
 
-  completeQuizSession(quizId: number) {
-    this.db
-      .query(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
-      .run({ $quizId: quizId });
-  }
+	completeQuizSession(quizId: number) {
+		this.db
+			.query(`UPDATE quizzes SET status = 'completed' WHERE id = $quizId`)
+			.run({ $quizId: quizId });
+	}
 
-  getUserQuizStats(telegramUserId: number): UserQuizStats {
-    const rows = this.db
-      .query(
-        `
+	getUserQuizStats(telegramUserId: number): UserQuizStats {
+		const rows = this.db
+			.query(
+				`
         SELECT questions_json, score
         FROM quizzes
         WHERE telegram_user_id = $telegramUserId
           AND status = 'completed'
       `,
-      )
-      .all({ $telegramUserId: telegramUserId }) as CompletedQuizStatsRow[];
+			)
+			.all({ $telegramUserId: telegramUserId }) as CompletedQuizStatsRow[];
 
-    const completedVideos = rows.length;
-    const totalCorrectAnswers = rows.reduce((total, row) => total + row.score, 0);
-    const totalQuestions = rows.reduce((total, row) => {
-      const questions = JSON.parse(row.questions_json) as unknown[];
-      return total + questions.length;
-    }, 0);
-    const correctPercentage =
-      totalQuestions === 0 ? 0 : (totalCorrectAnswers / totalQuestions) * 100;
+		const completedVideos = rows.length;
+		const totalCorrectAnswers = rows.reduce(
+			(total, row) => total + row.score,
+			0,
+		);
+		const totalQuestions = rows.reduce((total, row) => {
+			const questions = JSON.parse(row.questions_json) as unknown[];
+			return total + questions.length;
+		}, 0);
+		const correctPercentage =
+			totalQuestions === 0 ? 0 : (totalCorrectAnswers / totalQuestions) * 100;
 
-    return {
-      completedVideos,
-      totalCorrectAnswers,
-      totalQuestions,
-      correctPercentage,
-    };
-  }
+		return {
+			completedVideos,
+			totalCorrectAnswers,
+			totalQuestions,
+			correctPercentage,
+		};
+	}
 }

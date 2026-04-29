@@ -12,7 +12,7 @@ export type QuizPayload = {
 };
 
 export type GradeResult = {
-	isCorrect: boolean;
+	score: number;
 	feedback: string;
 };
 

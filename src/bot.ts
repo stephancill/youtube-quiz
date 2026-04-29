@@ -111,7 +111,7 @@ export class QuizBot {
 
 			const stats = this.db.getUserQuizStats(ctx.from.id);
 			await ctx.reply(
-				`Completed videos: ${stats.completedVideos}\nCorrect answers: ${stats.totalCorrectAnswers}/${stats.totalQuestions}\nAggregate score: ${stats.correctPercentage.toFixed(1)}%`,
+				`Completed videos: ${stats.completedVideos}\nScore: ${stats.totalCorrectAnswers}/${stats.totalQuestions}\nAggregate: ${stats.correctPercentage.toFixed(1)}%`,
 			);
 		});
 
@@ -383,7 +383,7 @@ export class QuizBot {
 
 		const userAnswer = text.trim();
 
-		let grade: { isCorrect: boolean; feedback: string };
+		let grade: { score: number; feedback: string };
 		try {
 			grade = await this.geminiService.gradeAnswer({
 				question: question.prompt,
@@ -397,15 +397,20 @@ export class QuizBot {
 			return;
 		}
 
-		const nextScore = grade.isCorrect ? active.score + 1 : active.score;
+		const nextScore = active.score + grade.score;
 		const nextIndex = active.currentQuestionIndex + 1;
 		this.db.advanceQuizSession(active.id, nextIndex, nextScore);
 
-		await ctx.reply(
-			grade.isCorrect
-				? `Correct. ${grade.feedback}`
-				: `Not quite. ${grade.feedback}\n\nCorrect answer: ${question.correctAnswer}`,
-		);
+		const scoreLabel =
+			grade.score === 1
+				? "Correct"
+				: grade.score >= 0.5
+					? "Partially correct"
+					: "Not quite";
+		const correctAnswerSuffix =
+			grade.score === 0 ? `\n\nCorrect answer: ${question.correctAnswer}` : "";
+
+		await ctx.reply(`${scoreLabel}. ${grade.feedback}${correctAnswerSuffix}`);
 
 		if (nextIndex >= active.questions.length) {
 			this.db.completeQuizSession(active.id);

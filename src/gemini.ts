@@ -18,7 +18,7 @@ const quizSchema = z.object({
 });
 
 const gradeSchema = z.object({
-	isCorrect: z.boolean(),
+	score: z.number().min(0).max(1),
 	feedback: z.string().min(1),
 });
 
@@ -91,20 +91,21 @@ Return strict JSON only:
 		sourceTimestamp?: string;
 		userAnswer: string;
 	}): Promise<GradeResult> {
-		const prompt = `Judge whether the user's answer should be treated as correct.
+		const prompt = `Judge the user's answer with partial credit allowed.
 Question: ${input.question}
 Correct answer: ${input.correctAnswer}
 Reference timestamp in source video: ${input.sourceTimestamp ?? "unknown"}
 User answer: ${input.userAnswer}
 
 Rules:
-- Mark true if user answer is equivalent in meaning, even if wording differs.
-- Mark false for vague or unrelated answers.
+- Award 1 if the user answer is fully equivalent in meaning to the correct answer, even if wording differs.
+- Award 0.5 if the answer is partially correct, covers some key points but misses others, or is in the right direction but imprecise.
+- Award 0 for vague, unrelated, or fully incorrect answers.
 - Keep feedback to one short sentence.
 
 Return strict JSON only:
 {
-  "isCorrect": true,
+  "score": 1,
   "feedback": "..."
 }`;
 
