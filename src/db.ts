@@ -33,6 +33,7 @@ type QuizRow = {
 	video_title: string;
 	questions_json: string;
 	current_question_index: number;
+	current_question_message_id: number | null;
 	score: number;
 };
 
@@ -55,6 +56,7 @@ export type ActiveQuizSession = {
 	videoId: string;
 	videoTitle: string;
 	currentQuestionIndex: number;
+	currentQuestionMessageId: number | null;
 	score: number;
 	questions: QuizPayload["questions"];
 };
@@ -86,6 +88,7 @@ export class AppDatabase {
         video_title TEXT NOT NULL,
         questions_json TEXT NOT NULL,
         current_question_index INTEGER NOT NULL DEFAULT 0,
+        current_question_message_id INTEGER,
         score REAL NOT NULL DEFAULT 0,
         status TEXT NOT NULL,
         created_at INTEGER NOT NULL,
@@ -101,6 +104,14 @@ export class AppDatabase {
 
 		try {
 			this.db.exec("ALTER TABLE users ADD COLUMN current_quiz_id INTEGER;");
+		} catch {
+			// Column already exists.
+		}
+
+		try {
+			this.db.exec(
+				"ALTER TABLE quizzes ADD COLUMN current_question_message_id INTEGER;",
+			);
 		} catch {
 			// Column already exists.
 		}
@@ -270,6 +281,7 @@ export class AppDatabase {
           video_title,
           questions_json,
           current_question_index,
+					current_question_message_id,
           score
 	        FROM quizzes
 	        WHERE telegram_user_id = $telegramUserId
@@ -295,6 +307,7 @@ export class AppDatabase {
 			videoId: row.video_id,
 			videoTitle: row.video_title,
 			currentQuestionIndex: row.current_question_index,
+			currentQuestionMessageId: row.current_question_message_id,
 			score: row.score,
 			questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
 		};
@@ -312,6 +325,7 @@ export class AppDatabase {
           video_title,
           questions_json,
           current_question_index,
+					current_question_message_id,
           score
         FROM quizzes
         WHERE id = $quizId
@@ -331,6 +345,55 @@ export class AppDatabase {
 			videoId: row.video_id,
 			videoTitle: row.video_title,
 			currentQuestionIndex: row.current_question_index,
+			currentQuestionMessageId: row.current_question_message_id,
+			score: row.score,
+			questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
+		};
+	}
+
+	getQuizSessionByQuestionMessage(input: {
+		telegramUserId: number;
+		chatId: number;
+		messageId: number;
+	}): ActiveQuizSession | null {
+		const row = this.db
+			.query(
+				`
+        SELECT
+          id,
+          telegram_user_id,
+          chat_id,
+          video_id,
+          video_title,
+          questions_json,
+          current_question_index,
+					current_question_message_id,
+          score
+        FROM quizzes
+        WHERE telegram_user_id = $telegramUserId
+          AND chat_id = $chatId
+          AND current_question_message_id = $messageId
+          AND status = 'active'
+      `,
+			)
+			.get({
+				$telegramUserId: input.telegramUserId,
+				$chatId: input.chatId,
+				$messageId: input.messageId,
+			}) as QuizRow | null;
+
+		if (!row) {
+			return null;
+		}
+
+		return {
+			id: row.id,
+			telegramUserId: row.telegram_user_id,
+			chatId: row.chat_id,
+			videoId: row.video_id,
+			videoTitle: row.video_title,
+			currentQuestionIndex: row.current_question_index,
+			currentQuestionMessageId: row.current_question_message_id,
 			score: row.score,
 			questions: JSON.parse(row.questions_json) as QuizPayload["questions"],
 		};
@@ -361,6 +424,14 @@ export class AppDatabase {
 			current_quiz_id?: number | null;
 		} | null;
 		return row?.current_quiz_id ?? null;
+	}
+
+	setCurrentQuestionMessageId(quizId: number, messageId: number) {
+		this.db
+			.query(
+				`UPDATE quizzes SET current_question_message_id = $messageId WHERE id = $quizId`,
+			)
+			.run({ $quizId: quizId, $messageId: messageId });
 	}
 
 	countActiveQuizSessions(telegramUserId: number): number {

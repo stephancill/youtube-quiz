@@ -328,7 +328,7 @@ export class QuizBot {
 			`hint:${quizId}:${telegramUserId}:${active.currentQuestionIndex}`,
 		);
 
-		await this.bot.api.sendMessage(
+		const sentMessage = await this.bot.api.sendMessage(
 			chatId,
 			`Question ${active.currentQuestionIndex + 1}/${active.questions.length}\n${this.escapeHtml(question.prompt)}\n\nReply with a short free-form answer.`,
 			{
@@ -337,6 +337,7 @@ export class QuizBot {
 				reply_markup: keyboard,
 			},
 		);
+		this.db.setCurrentQuestionMessageId(active.id, sentMessage.message_id);
 	}
 
 	private escapeHtml(value: string): string {
@@ -360,10 +361,22 @@ export class QuizBot {
 			return;
 		}
 
-		const quizId = this.db.getCurrentQuizId(ctx.from.id);
-		const active = quizId
-			? this.db.getQuizSession(quizId)
-			: this.db.getActiveQuizSession(ctx.from.id);
+		const replyToMessageId = message.reply_to_message?.message_id;
+		const active = replyToMessageId
+			? this.db.getQuizSessionByQuestionMessage({
+					telegramUserId: ctx.from.id,
+					chatId: message.chat.id,
+					messageId: replyToMessageId,
+				})
+			: this.getImplicitQuizSession(ctx.from.id);
+
+		if (replyToMessageId && !active) {
+			await ctx.reply(
+				"That reply does not match an active unanswered quiz question. Reply to the latest question message for the quiz you want to answer.",
+			);
+			return;
+		}
+
 		if (!active) {
 			if (!text.startsWith("/")) {
 				await ctx.reply(
@@ -426,5 +439,12 @@ export class QuizBot {
 			ctx.from.id,
 			ctx.chat?.id ?? active.chatId,
 		);
+	}
+
+	private getImplicitQuizSession(telegramUserId: number) {
+		const quizId = this.db.getCurrentQuizId(telegramUserId);
+		return quizId
+			? this.db.getQuizSession(quizId)
+			: this.db.getActiveQuizSession(telegramUserId);
 	}
 }
