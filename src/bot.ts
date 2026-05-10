@@ -421,7 +421,7 @@ export class QuizBot {
 					? "Partially correct"
 					: "Not quite";
 		const correctAnswerSuffix =
-			grade.score === 0 ? `\n\nCorrect answer: ${question.correctAnswer}` : "";
+			grade.score < 1 ? `\n\nCorrect answer: ${question.correctAnswer}` : "";
 
 		await ctx.reply(`${scoreLabel}. ${grade.feedback}${correctAnswerSuffix}`);
 
