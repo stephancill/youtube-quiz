@@ -1,9 +1,9 @@
-import { createServer } from "node:http";
 import { QuizBot } from "./src/bot";
 import { config } from "./src/config";
 import { AppDatabase } from "./src/db";
 import { GeminiService } from "./src/gemini";
 import { WatchHistoryPoller } from "./src/poller";
+import { createApiServer } from "./src/server";
 import { YoutubeService } from "./src/youtube";
 
 const db = new AppDatabase(config.DATABASE_PATH);
@@ -28,11 +28,8 @@ quizBot.setRefreshHistoryHandler(async () => {
 const port = Number.parseInt(process.env.PORT ?? "", 10);
 
 if (Number.isFinite(port) && port > 0) {
-	createServer((_, res) => {
-		res.writeHead(200, { "content-type": "text/plain; charset=utf-8" });
-		res.end("ok");
-	}).listen(port, () => {
-		console.log(`Health server listening on :${port}`);
+	createApiServer({ db, youtubeService }).listen(port, () => {
+		console.log(`API server listening on :${port}`);
 	});
 }
 

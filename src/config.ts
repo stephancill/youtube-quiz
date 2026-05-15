@@ -27,6 +27,7 @@ const envSchema = z.object({
 		.default("8")
 		.transform((value) => Number.parseInt(value, 10)),
 	DATABASE_PATH: z.string().default("./data/app.db"),
+	APPLE_CLIENT_ID: z.string().default("tech.stupid.YouTubeQuiz"),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

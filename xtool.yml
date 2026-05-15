@@ -1,0 +1,5 @@
+version: 1
+bundleID: tech.stupid.YouTubeQuiz
+teamID: 6JKMV57Y77
+infoPath: Info.plist
+entitlementsPath: Entitlements.plist

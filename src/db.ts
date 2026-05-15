@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { z } from "zod";
@@ -40,6 +41,13 @@ type QuizRow = {
 type CompletedQuizStatsRow = {
 	questions_json: string;
 	score: number;
+};
+
+export type AppUser = {
+	id: number;
+	appleSubject: string;
+	email: string | null;
+	youtubeLinked: boolean;
 };
 
 export type UserQuizStats = {
@@ -94,6 +102,25 @@ export class AppDatabase {
         created_at INTEGER NOT NULL,
         UNIQUE(telegram_user_id, video_id)
       );
+
+      CREATE TABLE IF NOT EXISTS app_users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        apple_subject TEXT NOT NULL UNIQUE,
+        email TEXT,
+        youtube_cookies_json TEXT,
+        last_polled_published_at TEXT,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS app_sessions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        app_user_id INTEGER NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        FOREIGN KEY (app_user_id) REFERENCES app_users(id)
+      );
     `);
 
 		try {
@@ -115,6 +142,128 @@ export class AppDatabase {
 		} catch {
 			// Column already exists.
 		}
+	}
+
+	upsertAppleUser(input: { subject: string; email: string | null }): AppUser {
+		const now = Date.now();
+		this.db
+			.query(
+				`
+        INSERT INTO app_users (apple_subject, email, created_at, updated_at)
+        VALUES ($appleSubject, $email, $createdAt, $updatedAt)
+        ON CONFLICT(apple_subject)
+        DO UPDATE SET
+          email = COALESCE($email, email),
+          updated_at = $updatedAt
+      `,
+			)
+			.run({
+				$appleSubject: input.subject,
+				$email: input.email,
+				$createdAt: now,
+				$updatedAt: now,
+			});
+
+		const user = this.getAppUserByAppleSubject(input.subject);
+		if (!user) {
+			throw new Error("Could not load app user after Apple sign in.");
+		}
+		return user;
+	}
+
+	createAppSession(input: {
+		appUserId: number;
+		token: string;
+		expiresAt: Date;
+	}) {
+		this.db
+			.query(
+				`
+        INSERT INTO app_sessions (app_user_id, token_hash, created_at, expires_at)
+        VALUES ($appUserId, $tokenHash, $createdAt, $expiresAt)
+      `,
+			)
+			.run({
+				$appUserId: input.appUserId,
+				$tokenHash: hashSessionToken(input.token),
+				$createdAt: Date.now(),
+				$expiresAt: input.expiresAt.getTime(),
+			});
+	}
+
+	getAppUserBySessionToken(token: string | null): AppUser | null {
+		if (!token) {
+			return null;
+		}
+
+		const row = this.db
+			.query(
+				`
+        SELECT
+          app_users.id,
+          app_users.apple_subject,
+          app_users.email,
+          app_users.youtube_cookies_json
+        FROM app_sessions
+        JOIN app_users ON app_users.id = app_sessions.app_user_id
+        WHERE app_sessions.token_hash = $tokenHash
+          AND app_sessions.expires_at > $now
+        LIMIT 1
+      `,
+			)
+			.get({
+				$tokenHash: hashSessionToken(token),
+				$now: Date.now(),
+			}) as {
+			id: number;
+			apple_subject: string;
+			email: string | null;
+			youtube_cookies_json: string | null;
+		} | null;
+
+		return row ? appUserFromRow(row) : null;
+	}
+
+	saveAppYoutubeCookieJar(input: {
+		appUserId: number;
+		cookieJar: YoutubeCookieJar;
+	}) {
+		this.db
+			.query(
+				`
+        UPDATE app_users
+        SET youtube_cookies_json = $cookieJarJson,
+            last_polled_published_at = $lastPolledPublishedAt,
+            updated_at = $updatedAt
+        WHERE id = $appUserId
+      `,
+			)
+			.run({
+				$appUserId: input.appUserId,
+				$cookieJarJson: JSON.stringify(input.cookieJar),
+				$lastPolledPublishedAt: new Date().toISOString(),
+				$updatedAt: Date.now(),
+			});
+	}
+
+	private getAppUserByAppleSubject(appleSubject: string): AppUser | null {
+		const row = this.db
+			.query(
+				`
+        SELECT id, apple_subject, email, youtube_cookies_json
+        FROM app_users
+        WHERE apple_subject = $appleSubject
+        LIMIT 1
+      `,
+			)
+			.get({ $appleSubject: appleSubject }) as {
+			id: number;
+			apple_subject: string;
+			email: string | null;
+			youtube_cookies_json: string | null;
+		} | null;
+
+		return row ? appUserFromRow(row) : null;
 	}
 
 	upsertTelegramUser(telegramUserId: number, chatId: number) {
@@ -521,4 +670,22 @@ export class AppDatabase {
 			correctPercentage,
 		};
 	}
+}
+
+function hashSessionToken(token: string): string {
+	return createHash("sha256").update(token).digest("hex");
+}
+
+function appUserFromRow(row: {
+	id: number;
+	apple_subject: string;
+	email: string | null;
+	youtube_cookies_json: string | null;
+}): AppUser {
+	return {
+		id: row.id,
+		appleSubject: row.apple_subject,
+		email: row.email,
+		youtubeLinked: row.youtube_cookies_json !== null,
+	};
 }

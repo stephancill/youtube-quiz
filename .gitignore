@@ -31,6 +31,8 @@ tmp/
 .eslintcache
 .cache
 *.tsbuildinfo
+.build/
+xtool/
 
 # IntelliJ based IDEs
 .idea

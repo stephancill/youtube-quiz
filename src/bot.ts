@@ -1,8 +1,8 @@
 import { Bot, type Context, InlineKeyboard } from "grammy";
 import { config } from "./config";
+import { parseYoutubeCookieJarFromHeader } from "./cookies";
 import type { AppDatabase } from "./db";
 import type { GeminiService } from "./gemini";
-import type { YoutubeCookieJar } from "./types";
 import type { YoutubeService } from "./youtube";
 
 export class QuizBot {
@@ -218,7 +218,7 @@ export class QuizBot {
 		}
 
 		try {
-			const cookieJar = this.parseCookieJarFromHeader(message.text);
+			const cookieJar = parseYoutubeCookieJarFromHeader(message.text);
 			await ctx.reply("Testing YouTube cookie access now...");
 			const validatedCookieJar = await this.youtubeService.validateCookieJar({
 				telegramUserId: ctx.from.id,
@@ -237,53 +237,6 @@ export class QuizBot {
 				`Could not verify cookie header: ${message}. Paste a fresh semicolon-separated Cookie header string from an authenticated YouTube tab, like SID=...; HSID=...; SAPISID=...`,
 			);
 		}
-	}
-
-	private parseCookieJarFromHeader(input: string): YoutubeCookieJar {
-		const normalized = input.trim();
-		if (!normalized) {
-			throw new Error("empty string");
-		}
-
-		const pairs = normalized
-			.split(";")
-			.map((part) => part.trim())
-			.filter((part) => part.length > 0);
-
-		if (pairs.length === 0 || pairs.every((pair) => !pair.includes("="))) {
-			throw new Error("missing key=value pairs");
-		}
-
-		const cookieJar: YoutubeCookieJar = {};
-
-		for (const pair of pairs) {
-			const separatorIndex = pair.indexOf("=");
-			if (separatorIndex <= 0) {
-				continue;
-			}
-
-			const cookieName = pair.slice(0, separatorIndex).trim();
-			const cookieValue = pair.slice(separatorIndex + 1);
-			if (!cookieName) {
-				continue;
-			}
-
-			cookieJar[cookieName] = {
-				value: cookieValue,
-				expiresAt: null,
-				domain: null,
-				path: null,
-				secure: false,
-				httpOnly: false,
-				sameSite: null,
-			};
-		}
-
-		if (Object.keys(cookieJar).length === 0) {
-			throw new Error("missing key=value pairs");
-		}
-
-		return cookieJar;
 	}
 
 	async sendQuizIntro(input: {

@@ -35,6 +35,19 @@ Then in Telegram:
 2. Send `/link`
 3. Paste your full YouTube Cookie header string.
 
+## iOS scaffold
+
+This repo also includes an xtool SwiftUI iOS scaffold for capturing YouTube auth through an in-app web view, mirroring the connection flow used in `../no-feed-social`.
+
+```bash
+PORT=3000 APPLE_CLIENT_ID=tech.stupid.YouTubeQuiz bun run dev
+xtool dev build
+```
+
+Open the app, sign in with Apple against the quiz server, then tap **Log in to YouTube**. The app stores the derived YouTube cookie header in Keychain and uploads it to the authenticated server account so the server can validate and poll YouTube.
+
+For simulator testing, leave `entitlementsPath` out of `xtool.yml`; xtool's ad-hoc simulator signing can be rejected by launchd when the restricted Sign in with Apple entitlement is present. For physical-device testing, add `entitlementsPath: Entitlements.plist` back after enabling Sign in with Apple on the xtool-created App ID.
+
 ## Commands
 
 - `/start` registers your Telegram user/chat.
