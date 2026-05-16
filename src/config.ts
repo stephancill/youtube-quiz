@@ -27,7 +27,30 @@ const envSchema = z.object({
 		.default("8")
 		.transform((value) => Number.parseInt(value, 10)),
 	DATABASE_PATH: z.string().default("./data/app.db"),
+	APPLE_CLIENT_ID: z.string().default("tech.stupid.YoutubeQuiz"),
+	APPLE_EMAIL_WHITELIST: z
+		.string()
+		.default("")
+		.transform((value) =>
+			parseStringList(value).map((email) => email.toLowerCase()),
+		),
+	APPLE_SUBJECT_WHITELIST: z
+		.string()
+		.default("")
+		.transform((value) => parseStringList(value)),
+	APNS_KEY_ID: z.string().optional(),
+	APNS_TEAM_ID: z.string().optional(),
+	APNS_BUNDLE_ID: z.string().default("tech.stupid.YoutubeQuiz"),
+	APNS_PRIVATE_KEY: z.string().optional(),
+	APNS_ENVIRONMENT: z.enum(["sandbox", "production"]).default("sandbox"),
 });
+
+function parseStringList(value: string): string[] {
+	return value
+		.split(",")
+		.map((entry) => entry.trim())
+		.filter((entry) => entry.length > 0);
+}
 
 const parsedEnv = envSchema.safeParse(process.env);
 

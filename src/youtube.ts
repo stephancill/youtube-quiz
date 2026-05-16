@@ -2,12 +2,14 @@ import type { AppDatabase } from "./db";
 import type { LinkedUser, YoutubeCookieJar, YoutubeVideo } from "./types";
 
 const MIN_VIDEO_LENGTH_SECONDS = 5 * 60;
-const YOUTUBE_ORIGIN = "https://www.youtube.com";
+const YOUTUBE_ORIGIN = "https://m.youtube.com";
 const HISTORY_URL = `${YOUTUBE_ORIGIN}/feed/history`;
 const DEFAULT_INNERTUBE_API_KEY = "AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8";
 const DEFAULT_CLIENT_VERSION = "2.20260424.01.00";
 const DEFAULT_CLIENT_NAME = "1";
 const GUIDE_WARMUP_REQUESTS = 2;
+const YOUTUBE_USER_AGENT =
+	"Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 const CRITICAL_AUTH_COOKIES = new Set([
 	"SID",
 	"HSID",
@@ -40,6 +42,30 @@ type RuntimeRequestContext = {
 	clientName: string;
 	sessionIndex: string;
 	visitorData: string | null;
+};
+
+export type YoutubeHistorySourceDebug = {
+	first: YoutubeHistorySourceSnapshot;
+	final: YoutubeHistorySourceSnapshot;
+	browse: YoutubeBrowseSourceSnapshot;
+	runtimeContext: RuntimeRequestContext;
+	cookieCount: number;
+};
+
+type YoutubeHistorySourceSnapshot = {
+	status: number;
+	ok: boolean;
+	url: string;
+	title: string | null;
+	hasAuthOrConsent: boolean;
+	html: string;
+};
+
+type YoutubeBrowseSourceSnapshot = {
+	status: number;
+	ok: boolean;
+	url: string;
+	json: unknown;
 };
 
 export class YoutubeService {
@@ -120,6 +146,45 @@ export class YoutubeService {
 			`[youtube] user=${input.telegramUserId} validate_complete videos=${videos.length} cookie_count=${Object.keys(workingCookieJar).length}`,
 		);
 		return workingCookieJar;
+	}
+
+	async fetchHistorySourceDebug(input: {
+		telegramUserId: number;
+		cookieJar: YoutubeCookieJar;
+	}): Promise<YoutubeHistorySourceDebug> {
+		let workingCookieJar: YoutubeCookieJar = { ...input.cookieJar };
+		const firstHistoryResponse = await this.fetchHistoryPage(workingCookieJar);
+		workingCookieJar = this.applyMergedCookieJar(
+			workingCookieJar,
+			firstHistoryResponse.response.headers,
+		);
+
+		const runtimeContext = this.extractRuntimeRequestContext(
+			firstHistoryResponse.html,
+		);
+		workingCookieJar = await this.warmupGuideRequests({
+			telegramUserId: input.telegramUserId,
+			cookieJar: workingCookieJar,
+			runtimeContext,
+		});
+
+		const finalHistoryResponse = await this.fetchHistoryPage(workingCookieJar);
+		workingCookieJar = this.applyMergedCookieJar(
+			workingCookieJar,
+			finalHistoryResponse.response.headers,
+		);
+		const browse = await this.fetchHistoryBrowse({
+			cookieJar: workingCookieJar,
+			runtimeContext,
+		});
+
+		return {
+			first: this.historySourceSnapshot(firstHistoryResponse),
+			final: this.historySourceSnapshot(finalHistoryResponse),
+			browse,
+			runtimeContext,
+			cookieCount: Object.keys(workingCookieJar).length,
+		};
 	}
 
 	async listRecentWatchedVideos(
@@ -263,8 +328,7 @@ export class YoutubeService {
 				"sec-fetch-site": "none",
 				"sec-fetch-user": "?1",
 				"upgrade-insecure-requests": "1",
-				"user-agent":
-					"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+				"user-agent": YOUTUBE_USER_AGENT,
 				cookie: cookieHeader,
 			},
 			redirect: "follow",
@@ -310,8 +374,7 @@ export class YoutubeService {
 						"content-type": "application/json",
 						origin: YOUTUBE_ORIGIN,
 						referer: `${YOUTUBE_ORIGIN}/`,
-						"user-agent":
-							"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
+						"user-agent": YOUTUBE_USER_AGENT,
 						cookie: this.buildCookieHeader(cookieJar),
 						authorization: authHeader,
 						"x-origin": YOUTUBE_ORIGIN,
@@ -351,6 +414,66 @@ export class YoutubeService {
 		}
 
 		return cookieJar;
+	}
+
+	private async fetchHistoryBrowse(input: {
+		cookieJar: YoutubeCookieJar;
+		runtimeContext: RuntimeRequestContext;
+	}): Promise<YoutubeBrowseSourceSnapshot> {
+		const authHeader = this.computeAuthorizationHeader(input.cookieJar);
+		const response = await fetch(
+			`${YOUTUBE_ORIGIN}/youtubei/v1/browse?prettyPrint=false&key=${encodeURIComponent(input.runtimeContext.apiKey)}`,
+			{
+				method: "POST",
+				headers: {
+					accept: "*/*",
+					"accept-language": "en-US,en;q=0.9",
+					"content-type": "application/json",
+					origin: YOUTUBE_ORIGIN,
+					referer: `${YOUTUBE_ORIGIN}/feed/history`,
+					"user-agent": YOUTUBE_USER_AGENT,
+					cookie: this.buildCookieHeader(input.cookieJar),
+					authorization: authHeader,
+					"x-origin": YOUTUBE_ORIGIN,
+					"x-goog-authuser": input.runtimeContext.sessionIndex,
+					...(input.runtimeContext.visitorData
+						? { "x-goog-visitor-id": input.runtimeContext.visitorData }
+						: {}),
+					"x-youtube-client-name": input.runtimeContext.clientName,
+					"x-youtube-client-version": input.runtimeContext.clientVersion,
+				},
+				body: JSON.stringify({
+					browseId: "FEhistory",
+					context: {
+						client: {
+							clientName: "WEB",
+							clientVersion: input.runtimeContext.clientVersion,
+							hl: "en",
+							gl: "US",
+							...(input.runtimeContext.visitorData
+								? { visitorData: input.runtimeContext.visitorData }
+								: {}),
+						},
+						request: { useSsl: true },
+						user: { lockedSafetyMode: false },
+					},
+				}),
+			},
+		);
+
+		let json: unknown;
+		try {
+			json = await response.json();
+		} catch {
+			json = null;
+		}
+
+		return {
+			status: response.status,
+			ok: response.ok,
+			url: response.url,
+			json,
+		};
 	}
 
 	private extractRuntimeRequestContext(html: string): RuntimeRequestContext {
@@ -449,6 +572,20 @@ export class YoutubeService {
 		console.log(
 			`[youtube] user=${input.telegramUserId} stage=${input.stage} status=${input.response.status} ok=${input.response.ok} url=${input.response.url || "-"} title=${this.extractHtmlTitle(input.html) || "-"} has_auth_or_consent=${this.looksLikeAuthOrConsentPage(input.html)}`,
 		);
+	}
+
+	private historySourceSnapshot(input: {
+		response: Response;
+		html: string;
+	}): YoutubeHistorySourceSnapshot {
+		return {
+			status: input.response.status,
+			ok: input.response.ok,
+			url: input.response.url,
+			title: this.extractHtmlTitle(input.html),
+			hasAuthOrConsent: this.looksLikeAuthOrConsentPage(input.html),
+			html: input.html,
+		};
 	}
 
 	private extractHtmlTitle(html: string): string | null {
@@ -744,18 +881,26 @@ export class YoutubeService {
 	}
 
 	private extractYtInitialData(html: string): unknown {
-		const patterns = [
+		const objectPatterns = [
 			/var ytInitialData = (\{[\s\S]*?\});<\/script>/,
 			/ytInitialData\s*=\s*(\{[\s\S]*?\});/,
 		];
 
-		for (const pattern of patterns) {
+		for (const pattern of objectPatterns) {
 			const match = html.match(pattern);
 			if (!match?.[1]) {
 				continue;
 			}
 			try {
 				return JSON.parse(match[1]);
+			} catch {}
+		}
+
+		const stringMatch = html.match(/var ytInitialData = ('[\s\S]*?');/);
+		if (stringMatch?.[1]) {
+			try {
+				const json = Function(`return ${stringMatch[1]}`)() as string;
+				return JSON.parse(json);
 			} catch {}
 		}
 
@@ -834,6 +979,68 @@ export class YoutubeService {
 						title,
 						channelTitle,
 						publishedAt: this.parseRelativeTimeToIso(publishedText),
+						watchedRatio,
+					});
+				}
+			}
+
+			const maybeCompactRenderer = current as {
+				compactVideoRenderer?: unknown;
+			};
+			if (
+				maybeCompactRenderer.compactVideoRenderer &&
+				typeof maybeCompactRenderer.compactVideoRenderer === "object"
+			) {
+				const video = maybeCompactRenderer.compactVideoRenderer as {
+					videoId?: unknown;
+					title?: { runs?: Array<{ text?: unknown }> };
+					longBylineText?: { runs?: Array<{ text?: unknown }> };
+					lengthText?: {
+						simpleText?: unknown;
+						runs?: Array<{ text?: unknown }>;
+					};
+					thumbnailOverlays?: Array<{
+						thumbnailOverlayResumePlaybackRenderer?: {
+							percentDurationWatched?: unknown;
+						};
+					}>;
+				};
+
+				const videoId =
+					typeof video.videoId === "string" ? video.videoId : null;
+				const title =
+					typeof video.title?.runs?.[0]?.text === "string"
+						? video.title.runs[0].text
+						: null;
+				const channelTitle =
+					typeof video.longBylineText?.runs?.[0]?.text === "string"
+						? video.longBylineText.runs[0].text
+						: "Unknown channel";
+				const lengthText =
+					typeof video.lengthText?.simpleText === "string"
+						? video.lengthText.simpleText
+						: typeof video.lengthText?.runs?.[0]?.text === "string"
+							? video.lengthText.runs[0].text
+							: null;
+				const durationSeconds = this.parseClockDurationToSeconds(lengthText);
+				const watchedRatio = this.percentToRatio(
+					video.thumbnailOverlays?.find((overlay) =>
+						Boolean(overlay.thumbnailOverlayResumePlaybackRenderer),
+					)?.thumbnailOverlayResumePlaybackRenderer?.percentDurationWatched,
+				);
+
+				if (
+					videoId &&
+					title &&
+					!seenVideoIds.has(videoId) &&
+					durationSeconds >= MIN_VIDEO_LENGTH_SECONDS
+				) {
+					seenVideoIds.add(videoId);
+					videos.push({
+						id: videoId,
+						title,
+						channelTitle,
+						publishedAt: new Date().toISOString(),
 						watchedRatio,
 					});
 				}
