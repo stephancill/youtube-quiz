@@ -32,14 +32,16 @@ public struct AvailableQuiz: Codable, Equatable, Identifiable, Sendable {
     public let currentQuestionIndex: Int
     public let questionCount: Int
     public let score: Double
+    public let answerScores: [Double?]
     public let status: String
 
-    public init(id: Int, videoTitle: String, currentQuestionIndex: Int, questionCount: Int, score: Double, status: String) {
+    public init(id: Int, videoTitle: String, currentQuestionIndex: Int, questionCount: Int, score: Double, answerScores: [Double?], status: String) {
         self.id = id
         self.videoTitle = videoTitle
         self.currentQuestionIndex = currentQuestionIndex
         self.questionCount = questionCount
         self.score = score
+        self.answerScores = answerScores
         self.status = status
     }
 }
