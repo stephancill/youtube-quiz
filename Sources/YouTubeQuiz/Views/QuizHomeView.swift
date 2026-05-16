@@ -23,9 +23,7 @@ struct QuizHomeView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(quiz.videoTitle)
                                     .font(.headline)
-                                Text("Question \(quiz.currentQuestionIndex + 1) of \(quiz.questionCount) · Score \(quiz.score, specifier: "%.1f")")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                QuestionBreakdown(quiz: quiz)
                             }
                         }
                     }
@@ -44,9 +42,7 @@ struct QuizHomeView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text(quiz.videoTitle)
                                     .font(.headline)
-                                Text("Final score \(quiz.score, specifier: "%.1f") / \(quiz.questionCount)")
-                                    .font(.subheadline)
-                                    .foregroundStyle(.secondary)
+                                QuestionBreakdown(quiz: quiz)
                             }
                         }
                     }
@@ -84,5 +80,54 @@ struct QuizHomeView: View {
         #else
             .automatic
         #endif
+    }
+}
+
+private struct QuestionBreakdown: View {
+    let quiz: AvailableQuiz
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0 ..< quiz.questionCount, id: \.self) { index in
+                QuestionBreakdownMark(score: score(at: index))
+            }
+        }
+        .font(.subheadline.weight(.semibold))
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    private func score(at index: Int) -> Double? {
+        guard index < quiz.answerScores.count else { return nil }
+        return quiz.answerScores[index]
+    }
+
+    private var accessibilityLabel: String {
+        let labels = (0 ..< quiz.questionCount).map { index in
+            guard let score = score(at: index) else { return "unanswered" }
+            if score >= 1 { return "correct" }
+            if score > 0 { return "partially correct" }
+            return "incorrect"
+        }
+        return labels.joined(separator: ", ")
+    }
+}
+
+private struct QuestionBreakdownMark: View {
+    let score: Double?
+
+    var body: some View {
+        if let score {
+            Image(systemName: score > 0 ? "checkmark" : "xmark")
+                .foregroundStyle(color(for: score))
+        } else {
+            Text("-")
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func color(for score: Double) -> Color {
+        if score >= 1 { return .green }
+        if score > 0 { return .blue }
+        return .red
     }
 }

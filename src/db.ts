@@ -105,6 +105,7 @@ export type AppAvailableQuiz = {
 	currentQuestionIndex: number;
 	questionCount: number;
 	score: number;
+	answerScores: Array<number | null>;
 	status: string;
 };
 
@@ -557,14 +558,29 @@ export class AppDatabase {
 				$status: input.status,
 			}) as AppQuizRow[];
 
-		return rows.map((row) => ({
-			id: row.id,
-			videoTitle: row.video_title,
-			currentQuestionIndex: row.current_question_index,
-			questionCount: (JSON.parse(row.questions_json) as unknown[]).length,
-			score: row.score,
-			status: row.status,
-		}));
+		return rows.map((row) => {
+			const questionCount = (JSON.parse(row.questions_json) as unknown[])
+				.length;
+			const answerScores = Array<number | null>(questionCount).fill(null);
+			for (const answer of this.listAppQuizAnswers({
+				appUserId: input.appUserId,
+				quizId: row.id,
+			})) {
+				if (answer.questionIndex >= 0 && answer.questionIndex < questionCount) {
+					answerScores[answer.questionIndex] = answer.score;
+				}
+			}
+
+			return {
+				id: row.id,
+				videoTitle: row.video_title,
+				currentQuestionIndex: row.current_question_index,
+				questionCount,
+				score: row.score,
+				answerScores,
+				status: row.status,
+			};
+		});
 	}
 
 	getAppQuizSession(input: {
