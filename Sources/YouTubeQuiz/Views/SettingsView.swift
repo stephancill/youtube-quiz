@@ -17,6 +17,7 @@ struct SettingsView: View {
                 LabeledContent("Signed in as") {
                     Text(viewModel.appSession?.user.email ?? "Unknown")
                         .foregroundStyle(.secondary)
+                        .textSelection(.enabled)
                 }
             }
 
