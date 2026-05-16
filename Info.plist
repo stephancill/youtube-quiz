@@ -10,11 +10,15 @@
 	<string>1</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>MinimumOSVersion</key>
+	<string>26.0</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>QuizServerBaseURL</key>
+	<string>http://192.168.111.19:3000</string>
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>

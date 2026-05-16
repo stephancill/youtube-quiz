@@ -19,7 +19,7 @@ public final class KeychainCredentialStore {
     private let decoder = JSONDecoder()
 
     public init(
-        service: String = "tech.stupid.YouTubeQuiz.credentials",
+        service: String = "tech.stupid.YoutubeQuiz.credentials",
         fallbackStore: UserDefaults = .standard
     ) {
         self.service = service

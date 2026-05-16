@@ -28,7 +28,7 @@ quizBot.setRefreshHistoryHandler(async () => {
 const port = Number.parseInt(process.env.PORT ?? "", 10);
 
 if (Number.isFinite(port) && port > 0) {
-	createApiServer({ db, youtubeService }).listen(port, () => {
+	createApiServer({ db, geminiService, youtubeService }).listen(port, () => {
 		console.log(`API server listening on :${port}`);
 	});
 }

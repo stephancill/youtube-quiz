@@ -1,8 +1,10 @@
 import type { Api } from "grammy";
+import { sendApnsNotification } from "./apns";
 import type { QuizBot } from "./bot";
 import { config } from "./config";
 import type { AppDatabase } from "./db";
 import type { GeminiService } from "./gemini";
+import type { AppLinkedUser, LinkedUser } from "./types";
 import type { YoutubeService } from "./youtube";
 
 const POLL_JITTER_FACTOR = 0.15;
@@ -53,9 +55,8 @@ export class WatchHistoryPoller {
 	}
 
 	private async listRecentWatchedVideosWithRetry(input: {
-		telegramUserId: number;
-		chatId: number;
-		youtubeUser: Parameters<YoutubeService["listRecentWatchedVideos"]>[0];
+		logUserId: string;
+		youtubeUser: LinkedUser;
 	}): Promise<Awaited<ReturnType<YoutubeService["listRecentWatchedVideos"]>>> {
 		try {
 			return await this.youtubeService.listRecentWatchedVideos(
@@ -80,7 +81,7 @@ export class WatchHistoryPoller {
 				) + AUTH_RETRY_MIN_DELAY_MS;
 
 			console.warn(
-				`[poller] user=${input.telegramUserId} auth_failure_retry_in_ms=${retryDelayMs}`,
+				`[poller] user=${input.logUserId} auth_failure_retry_in_ms=${retryDelayMs}`,
 			);
 			await this.sleep(retryDelayMs);
 
@@ -127,7 +128,10 @@ export class WatchHistoryPoller {
 			}
 			return config.TELEGRAM_USER_ID_WHITELIST.includes(user.telegramUserId);
 		});
-		console.log(`[poller] run_start linked_users=${linkedUsers.length}`);
+		const linkedAppUsers = this.db.getLinkedAppUsers();
+		console.log(
+			`[poller] run_start linked_users=${linkedUsers.length} linked_app_users=${linkedAppUsers.length}`,
+		);
 
 		for (const user of linkedUsers) {
 			try {
@@ -146,8 +150,7 @@ export class WatchHistoryPoller {
 				const slotsAvailable = MAX_ACTIVE_QUIZ_SESSIONS - activeQuizCount;
 
 				const videos = await this.listRecentWatchedVideosWithRetry({
-					telegramUserId: user.telegramUserId,
-					chatId: user.chatId,
+					logUserId: String(user.telegramUserId),
 					youtubeUser: user,
 				});
 				console.log(
@@ -232,6 +235,135 @@ export class WatchHistoryPoller {
 				);
 			}
 		}
+
+		for (const user of linkedAppUsers) {
+			await this.pollAppUser(user);
+		}
 		console.log(`[poller] run_complete elapsed_ms=${Date.now() - startedAt}`);
+	}
+
+	private async pollAppUser(user: AppLinkedUser) {
+		try {
+			let activeQuizCount = this.db.countActiveAppQuizSessions(user.appUserId);
+			console.log(
+				`[poller] app_user=${user.appUserId} active_quizzes=${activeQuizCount} last_polled=${user.lastPolledPublishedAt ?? "-"}`,
+			);
+			if (activeQuizCount >= MAX_ACTIVE_QUIZ_SESSIONS) {
+				console.log(
+					`[poller] app_user=${user.appUserId} skipped=active_quiz_limit`,
+				);
+				return;
+			}
+
+			const slotsAvailable = MAX_ACTIVE_QUIZ_SESSIONS - activeQuizCount;
+			const youtubeUser: LinkedUser = {
+				telegramUserId: -user.appUserId,
+				chatId: 0,
+				youtubeCookieJar: user.youtubeCookieJar,
+				lastPolledPublishedAt: user.lastPolledPublishedAt,
+			};
+			const videos = await this.listRecentWatchedVideosWithRetry({
+				logUserId: `app:${user.appUserId}`,
+				youtubeUser,
+			});
+			console.log(
+				`[poller] app_user=${user.appUserId} youtube_videos=${videos.length} slots_available=${slotsAvailable}`,
+			);
+			if (!user.lastPolledPublishedAt) {
+				const newestSeenPublishedAt = videos.reduce<string | null>(
+					(newest, video) =>
+						!newest || video.publishedAt > newest ? video.publishedAt : newest,
+					null,
+				);
+				if (newestSeenPublishedAt) {
+					this.db.markAppVideoPolled(user.appUserId, newestSeenPublishedAt);
+					console.log(
+						`[poller] app_user=${user.appUserId} initialized_poll_baseline=${newestSeenPublishedAt}`,
+					);
+				}
+				return;
+			}
+
+			const unseen = videos
+				.filter((video) => {
+					if (this.db.hasAppQuizForVideo(user.appUserId, video.id)) {
+						return false;
+					}
+					return (
+						!user.lastPolledPublishedAt ||
+						video.publishedAt > user.lastPolledPublishedAt
+					);
+				})
+				.sort((a, b) => (a.publishedAt > b.publishedAt ? -1 : 1));
+
+			const selected = unseen.slice(0, slotsAvailable);
+			console.log(
+				`[poller] app_user=${user.appUserId} unseen_videos=${unseen.length} selected_videos=${selected.length}`,
+			);
+			let newestProcessedPublishedAt: string | null = null;
+
+			for (const video of selected) {
+				console.log(
+					`[poller] app_user=${user.appUserId} generating_quiz video_id=${video.id} published_at=${video.publishedAt}`,
+				);
+				try {
+					const quiz = await this.geminiService.generateQuiz({
+						videoId: video.id,
+						videoTitle: video.title,
+						channelTitle: video.channelTitle,
+					});
+					this.db.createAppQuizSession(user.appUserId, quiz);
+					await this.notifyAppUser({
+						appUserId: user.appUserId,
+						videoTitle: video.title,
+					});
+					if (
+						!newestProcessedPublishedAt ||
+						video.publishedAt > newestProcessedPublishedAt
+					) {
+						newestProcessedPublishedAt = video.publishedAt;
+					}
+					activeQuizCount += 1;
+				} catch (error) {
+					const message =
+						error instanceof Error ? error.message : String(error);
+					console.error(
+						`[poller] app_user=${user.appUserId} skip_video=${video.id} reason=${message}`,
+					);
+				}
+			}
+
+			if (newestProcessedPublishedAt) {
+				this.db.markAppVideoPolled(user.appUserId, newestProcessedPublishedAt);
+				console.log(
+					`[poller] app_user=${user.appUserId} marked_polled=${newestProcessedPublishedAt}`,
+				);
+			}
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			console.error(`[poller] app_user=${user.appUserId} failed=${message}`);
+		}
+	}
+
+	private async notifyAppUser(input: {
+		appUserId: number;
+		videoTitle: string;
+	}) {
+		const deviceTokens = this.db.listNotificationDeviceTokens(input.appUserId);
+		if (deviceTokens.length === 0) {
+			return;
+		}
+
+		await Promise.allSettled(
+			deviceTokens.map((deviceToken) =>
+				sendApnsNotification({
+					deviceToken,
+					payload: {
+						title: "New YouTube Quiz",
+						body: input.videoTitle,
+					},
+				}),
+			),
+		);
 	}
 }

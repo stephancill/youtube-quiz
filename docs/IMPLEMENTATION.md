@@ -12,6 +12,7 @@
 
 - Added Sign in with Apple server auth at `POST /auth/apple`.
 - The server validates Apple identity tokens against Apple's JWKS endpoint, checks issuer, expiry, and `APPLE_CLIENT_ID`, then creates a random app session token.
+- Optional `APPLE_EMAIL_WHITELIST` and `APPLE_SUBJECT_WHITELIST` env vars restrict which Apple identities can create app sessions; leaving both empty keeps local/dev access open.
 - Session tokens are stored hashed in SQLite.
 - Added `PUT /youtube/cookies`, protected by the app session bearer token.
 - Cookie upload parses the cookie header, validates it through the existing `YoutubeService.validateCookieJar`, then stores the validated jar against the standalone app user.
@@ -20,8 +21,9 @@
 ## Current product gap
 
 - Standalone app users can sign in and upload YouTube cookies.
-- The existing poller still polls Telegram-linked users only.
-- A future pass needs app-user polling plus an in-app quiz feed/answer flow, or a deliberate mapping between app users and Telegram chats.
+- The iOS app gates users through Apple sign-in, then YouTube connection, then a quiz home screen.
+- The quiz home screen calls the protected `GET /quizzes` API and lists rows from `app_quizzes`.
+- The poller now includes app-linked users and creates `app_quizzes`; first-run app polling initializes a baseline from the newest fetched history item instead of generating quizzes for old watch history.
 
 ## YouTube auth and parsing notes
 
@@ -35,8 +37,8 @@
 ## Apple signing and xtool notes
 
 - Registered bundle ID work ended up involving two identifiers:
-  - The intended app ID: `tech.stupid.YouTubeQuiz`.
-  - xtool-created device install ID: `XTL-6JKMV57Y77.tech.stupid.YouTubeQuiz`.
+  - The intended app ID: `tech.stupid.YoutubeQuiz`.
+  - xtool-created device install ID: `XTL-6JKMV57Y77.tech.stupid.YoutubeQuiz`.
 - Sign in with Apple must be enabled on the xtool-created identifier for real-device installs that include the entitlement.
 - `Entitlements.plist` contains `com.apple.developer.applesignin = Default`.
 - For physical-device testing, add this to `xtool.yml`:
@@ -46,7 +48,7 @@ entitlementsPath: Entitlements.plist
 ```
 
 - For simulator testing, leave `entitlementsPath` out of `xtool.yml`. With xtool's ad-hoc simulator signing, the restricted Sign in with Apple entitlement caused launchd to reject the app before Swift started.
-- Current xtool simulator support only installs the app (`simctl install`) and returns; it does not launch the simulator app. A manual `xcrun simctl launch booted tech.stupid.YouTubeQuiz` is needed to verify launch behavior.
+- Current xtool simulator support only installs the app (`simctl install`) and returns; it does not launch the simulator app. A manual `xcrun simctl launch booted tech.stupid.YoutubeQuiz` is needed to verify launch behavior.
 - The simulator failure looked like an immediate crash, but logs showed:
 
 ```text
@@ -70,4 +72,4 @@ xtool dev build
 xtool dev run --simulator --no-attach --no-logs --launch-timeout 420
 ```
 
-Real-device install also succeeded after enabling Sign in with Apple on `XTL-6JKMV57Y77.tech.stupid.YouTubeQuiz`; the only launch failure observed at that point was from the iPhone locking before launch.
+Real-device install also succeeded after enabling Sign in with Apple on `XTL-6JKMV57Y77.tech.stupid.YoutubeQuiz`; the only launch failure observed at that point was from the iPhone locking before launch.

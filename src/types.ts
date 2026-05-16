@@ -42,3 +42,9 @@ export type LinkedUser = {
 	youtubeCookieJar: YoutubeCookieJar;
 	lastPolledPublishedAt: string | null;
 };
+
+export type AppLinkedUser = {
+	appUserId: number;
+	youtubeCookieJar: YoutubeCookieJar;
+	lastPolledPublishedAt: string | null;
+};
